@@ -1,0 +1,14 @@
+[package]
+name = "libxc-ffi"
+description = "libxc C binding FFI"
+readme = "readme.md"
+
+rust-version.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[dependencies]

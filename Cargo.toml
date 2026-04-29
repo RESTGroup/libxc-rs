@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "libxc", "libxc-ffi",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.82"
+version = "0.1.0"
+description = "libxc FFI bindings and wrappers"
+repository = "https://github.com/ajz34/libxc-rs"
+keywords = ["ffi", "chemistry"]
+categories = ["science"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+libxc-ffi = { path = "libxc-ffi" }

@@ -1,0 +1,15 @@
+[package]
+name = "libxc"
+description = "libxc wrapper for Rust"
+readme = "readme.md"
+
+rust-version.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[dependencies]
+libxc-ffi = { workspace = true }
