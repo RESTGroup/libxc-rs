@@ -13,3 +13,20 @@ license.workspace = true
 
 [dependencies]
 libxc-ffi = { workspace = true }
+duplicate = { version = "2.0" }
+cudarc = { version = "0.19", optional = true }
+
+[features]
+default = ["api-v7_0", "dynamic_loading"]
+
+# Dynamic library loading support
+dynamic_loading = ["libxc-ffi/dynamic_loading"]
+
+# GPU support
+cuda = ["cudarc"]
+
+# API versions of original libxc (cumulative)
+api-v6_2 = ["libxc-ffi/api-v6_2"]
+api-v7_0 = ["libxc-ffi/api-v7_0", "api-v6_2"]
+api-v7_1 = ["libxc-ffi/api-v7_1", "api-v7_0"]
+
