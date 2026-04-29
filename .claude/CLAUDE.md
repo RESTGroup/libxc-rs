@@ -37,6 +37,16 @@ Usually we use dynamic loading, and you need to set `DFTD4_DYLOAD` in environmen
   - Requires rho/sigma/tau/grad (functional kind)
   - Device/host or gpu/cpu (device type)
 
+## Handling of CPU and CUDA
+
+We will currently separating CPU and CUDA implementation. CUDA will always have a prefix (general function `libxc_cuda_`, associated function `cuda_`), and CPU will not have a prefix (general function `libxc_`, associated function no prefix).
+
+## Naming convention
+
+- We will not use the original libxc prefix `xc_`.
+- For functions and structs that will be exposed to users, add prefix `libxc_` for general functions, and `Libxc` for structs.
+- If some function is to be fallible, we can add suffix `_f` (`fn <func>_f -> Result<_, LibxcError>`).
+
 ## Libxc and Header versioning
 
 For this FFI wrapper, we will start from libxc v6.2.2.
