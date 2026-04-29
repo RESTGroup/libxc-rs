@@ -91,7 +91,6 @@ xc_func_set_fhc_enforcement
 xc_func_get_ext_params
 xc_func_get_ext_params_name
 xc_func_get_ext_params_value
-xc_mgga_new
 
 # v7.1
 

@@ -470,7 +470,6 @@ unsafe extern "C" {
         sigma: *const f64,
         out: *mut xc_gga_out_params,
     );
-    #[cfg(feature = "api-v7_0")]
     pub fn xc_mgga_new(
         func: *const xc_func_type,
         order: c_int,
