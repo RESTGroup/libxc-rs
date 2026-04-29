@@ -12,3 +12,11 @@ categories.workspace = true
 license.workspace = true
 
 [dependencies]
+
+[features]
+default = ["api-v7_0"]
+
+# API versions of original libxc
+api-v6_2 = []
+api-v7_0 = [api-v6_2]
+api-v7_1 = [api-v7_0]
