@@ -44,8 +44,8 @@ We will currently separating CPU and CUDA implementation. CUDA will always have 
 ## Naming convention
 
 - We will not use the original libxc prefix `xc_`.
-- For functions and structs that will be exposed to users, add prefix `libxc_` for general functions, and `Libxc` for structs.
-- If some function is to be fallible, we can add suffix `_f` (`fn <func>_f -> Result<_, LibxcError>`).
+- For functions and structs that will be exposed to users, add prefix `libxc_` for general functions, and `LibXC` for structs.
+- If some function is to be fallible, we can add suffix `_f` (`fn <func>_f -> Result<_, LibXCError>`).
 
 ## Libxc and Header versioning
 

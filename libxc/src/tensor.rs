@@ -10,13 +10,13 @@
 
 use duplicate::duplicate_item;
 
-pub struct LibxcTensorLayout {
+pub struct LibXCTensorLayout {
     pub shape: Vec<usize>,
     pub stride: Vec<isize>,
     pub offset: usize,
 }
 
-impl LibxcTensorLayout {
+impl LibXCTensorLayout {
     pub fn compute_offset(&self, indices: &[usize]) -> usize {
         assert!(indices.len() <= self.shape.len(), "Index length exceeds tensor dimensions");
         indices.iter().zip(&self.stride).map(|(i, s)| i * (*s as usize)).sum::<usize>()
@@ -34,7 +34,7 @@ impl LibxcTensorLayout {
 }
 
 /// A trait for tensor operations needed by LIBXC.
-pub trait LibxcTensorViewAPI<'a> {
+pub trait LibXCTensorViewAPI<'a> {
     /// The lifetime of the syncronization object for GPU tensors. For CPU
     /// tensors, this is None.
     type Lifetime: 'a;
@@ -49,7 +49,7 @@ pub trait LibxcTensorViewAPI<'a> {
     unsafe fn data_ptr(&'a mut self, offset: usize) -> (*const f64, Self::Lifetime);
 
     /// Get the tensor layout (shape, stride, offset).
-    fn layout(&self) -> &LibxcTensorLayout;
+    fn layout(&self) -> &LibXCTensorLayout;
 
     /// Get the shape of the tensor.
     fn shape(&self) -> &[usize] {
@@ -73,7 +73,7 @@ pub trait LibxcTensorViewAPI<'a> {
 }
 
 /// A trait for mutable tensor operations needed by LIBXC.
-pub trait LibxcTensorMutAPI<'a>: LibxcTensorViewAPI<'a> {
+pub trait LibXCTensorMutAPI<'a>: LibXCTensorViewAPI<'a> {
     /// Get a mutable raw pointer to the tensor data.
     ///
     /// # Safety
@@ -92,12 +92,12 @@ pub trait LibxcTensorMutAPI<'a>: LibxcTensorViewAPI<'a> {
     }
 }
 
-pub struct LibxcTensorBase<R, S = ()> {
+pub struct LibXCTensorBase<R, S = ()> {
     /// The actual data of the tensor. For CPU tensors, this is a Vec or a
     /// slice.
     pub data: R,
     /// The layout of the tensor, including shape, stride and offset.
-    pub layout: LibxcTensorLayout,
+    pub layout: LibXCTensorLayout,
     /// Device stream. Only useful for GPU tensors.
     pub stream: Option<S>,
 }
@@ -105,25 +105,25 @@ pub struct LibxcTensorBase<R, S = ()> {
 mod cpu_tensor {
     use super::*;
 
-    pub type LibxcTensorCpu = LibxcTensorBase<Vec<f64>>;
-    pub type LibxcTensorCpuView<'a> = LibxcTensorBase<&'a [f64]>;
-    pub type LibxcTensorCpuMut<'a> = LibxcTensorBase<&'a mut [f64]>;
+    pub type LibXCTensorCpu = LibXCTensorBase<Vec<f64>>;
+    pub type LibXCTensorCpuView<'a> = LibXCTensorBase<&'a [f64]>;
+    pub type LibXCTensorCpuMut<'a> = LibXCTensorBase<&'a mut [f64]>;
 
-    #[duplicate_item(TYPE; [LibxcTensorCpu]; [LibxcTensorCpuView<'_>]; [LibxcTensorCpuMut<'_>];)]
-    impl LibxcTensorViewAPI<'_> for TYPE {
+    #[duplicate_item(TYPE; [LibXCTensorCpu]; [LibXCTensorCpuView<'_>]; [LibXCTensorCpuMut<'_>];)]
+    impl LibXCTensorViewAPI<'_> for TYPE {
         type Lifetime = ();
 
         unsafe fn data_ptr(&mut self, offset: usize) -> (*const f64, Self::Lifetime) {
             unsafe { (self.data.as_ptr().add(offset), ()) }
         }
 
-        fn layout(&self) -> &LibxcTensorLayout {
+        fn layout(&self) -> &LibXCTensorLayout {
             &self.layout
         }
     }
 
-    #[duplicate_item(TYPE; [LibxcTensorCpu]; [LibxcTensorCpuMut<'_>];)]
-    impl LibxcTensorMutAPI<'_> for TYPE {
+    #[duplicate_item(TYPE; [LibXCTensorCpu]; [LibXCTensorCpuMut<'_>];)]
+    impl LibXCTensorMutAPI<'_> for TYPE {
         unsafe fn data_mut_ptr(&mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
             unsafe { (self.data.as_mut_ptr().add(offset), ()) }
         }
@@ -136,12 +136,12 @@ mod cuda_tensor {
     use cudarc::driver::*;
     use std::sync::Arc;
 
-    pub type LibxcTensorCuda = LibxcTensorBase<CudaSlice<f64>, Arc<CudaStream>>;
-    pub type LibxcTensorCudaView<'a> = LibxcTensorBase<CudaView<'a, f64>, Arc<CudaStream>>;
-    pub type LibxcTensorCudaMut<'a> = LibxcTensorBase<CudaViewMut<'a, f64>, Arc<CudaStream>>;
+    pub type LibXCTensorCuda = LibXCTensorBase<CudaSlice<f64>, Arc<CudaStream>>;
+    pub type LibXCTensorCudaView<'a> = LibXCTensorBase<CudaView<'a, f64>, Arc<CudaStream>>;
+    pub type LibXCTensorCudaMut<'a> = LibXCTensorBase<CudaViewMut<'a, f64>, Arc<CudaStream>>;
 
-    #[duplicate_item(TYPE; [LibxcTensorCuda]; [LibxcTensorCudaView<'_>]; [LibxcTensorCudaMut<'_>];)]
-    impl<'a> LibxcTensorViewAPI<'a> for TYPE {
+    #[duplicate_item(TYPE; [LibXCTensorCuda]; [LibXCTensorCudaView<'_>]; [LibXCTensorCudaMut<'_>];)]
+    impl<'a> LibXCTensorViewAPI<'a> for TYPE {
         type Lifetime = SyncOnDrop<'a>;
 
         unsafe fn data_ptr(&'a mut self, offset: usize) -> (*const f64, Self::Lifetime) {
@@ -151,13 +151,13 @@ mod cuda_tensor {
             (data_ptr, sync_on_drop)
         }
 
-        fn layout(&self) -> &LibxcTensorLayout {
+        fn layout(&self) -> &LibXCTensorLayout {
             &self.layout
         }
     }
 
-    #[duplicate_item(TYPE; [LibxcTensorCuda]; [LibxcTensorCudaMut<'a>];)]
-    impl<'a> LibxcTensorMutAPI<'a> for TYPE {
+    #[duplicate_item(TYPE; [LibXCTensorCuda]; [LibXCTensorCudaMut<'a>];)]
+    impl<'a> LibXCTensorMutAPI<'a> for TYPE {
         unsafe fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
             let stream = self.stream.get_or_insert_with(|| self.data.stream().clone());
             let (cu_device_ptr, sync_on_drop) = self.data.device_ptr_mut(stream);
@@ -181,9 +181,9 @@ fn playground() {
     let stream = ctx.default_stream();
     let data = stream.clone_htod(&vec![1.0, 2.0, 4.0]).unwrap();
     let data = data.as_view();
-    let mut tensor = LibxcTensorCudaView {
+    let mut tensor = LibXCTensorCudaView {
         data,
-        layout: LibxcTensorLayout { shape: vec![3], stride: vec![1], offset: 0 },
+        layout: LibXCTensorLayout { shape: vec![3], stride: vec![1], offset: 0 },
         stream: None,
     };
     let data_ptr = unsafe { tensor.data_ptr(0) };
