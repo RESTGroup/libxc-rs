@@ -35,12 +35,18 @@ impl LibxcTensorLayout {
 
 /// A trait for tensor operations needed by LIBXC.
 pub trait LibxcTensorViewAPI<'a> {
+    /// The lifetime of the syncronization object for GPU tensors. For CPU
+    /// tensors, this is None.
     type Lifetime: 'a;
 
     /// Get a raw pointer to the tensor data.
     ///
     /// The lifetime is None for CPU tensors, but for GPU it is `SyncOnDrop`.
-    fn data_ptr(&'a self, offset: usize) -> (*const f64, Self::Lifetime);
+    ///
+    /// # Safety
+    ///
+    /// Offset must not exceed the total number of elements.
+    unsafe fn data_ptr(&'a mut self, offset: usize) -> (*const f64, Self::Lifetime);
 
     /// Get the tensor layout (shape, stride, offset).
     fn layout(&self) -> &LibxcTensorLayout;
@@ -56,7 +62,11 @@ pub trait LibxcTensorViewAPI<'a> {
     }
 
     /// Get a raw pointer to the tensor data for a given set of indices.
-    fn indexed_data_ptr(&'a self, indices: &[usize]) -> (*const f64, Self::Lifetime) {
+    ///
+    /// # Safety
+    ///
+    /// Offset must not exceed the total number of elements.
+    unsafe fn indexed_data_ptr(&'a mut self, indices: &[usize]) -> (*const f64, Self::Lifetime) {
         let offset = self.layout().compute_offset(indices);
         self.data_ptr(offset)
     }
@@ -65,30 +75,46 @@ pub trait LibxcTensorViewAPI<'a> {
 /// A trait for mutable tensor operations needed by LIBXC.
 pub trait LibxcTensorMutAPI<'a>: LibxcTensorViewAPI<'a> {
     /// Get a mutable raw pointer to the tensor data.
-    fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime);
+    ///
+    /// # Safety
+    ///
+    /// Offset must not exceed the total number of elements.
+    unsafe fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime);
 
     /// Get a mutable raw pointer to the tensor data for a given set of indices.
-    fn indexed_data_mut_ptr(&'a mut self, indices: &[usize]) -> (*mut f64, Self::Lifetime) {
+    ///
+    /// # Safety
+    ///
+    /// Offset must not exceed the total number of elements.
+    unsafe fn indexed_data_mut_ptr(&'a mut self, indices: &[usize]) -> (*mut f64, Self::Lifetime) {
         let offset = self.layout().compute_offset(indices);
         self.data_mut_ptr(offset)
     }
 }
 
-pub struct LibxcTensor<R, S> {
+pub struct LibxcTensorBase<R, S = ()> {
+    /// The actual data of the tensor. For CPU tensors, this is a Vec or a
+    /// slice.
     pub data: R,
+    /// The layout of the tensor, including shape, stride and offset.
     pub layout: LibxcTensorLayout,
+    /// Device stream. Only useful for GPU tensors.
     pub stream: Option<S>,
 }
 
 mod cpu_tensor {
     use super::*;
 
-    #[duplicate_item(TYPE; [Vec<f64>]; [&'a [f64]]; [&'a mut [f64]];)]
-    impl<'a, S> LibxcTensorViewAPI<'a> for LibxcTensor<TYPE, S> {
+    pub type LibxcTensorCpu = LibxcTensorBase<Vec<f64>>;
+    pub type LibxcTensorCpuView<'a> = LibxcTensorBase<&'a [f64]>;
+    pub type LibxcTensorCpuMut<'a> = LibxcTensorBase<&'a mut [f64]>;
+
+    #[duplicate_item(TYPE; [LibxcTensorCpu]; [LibxcTensorCpuView<'_>]; [LibxcTensorCpuMut<'_>];)]
+    impl LibxcTensorViewAPI<'_> for TYPE {
         type Lifetime = ();
 
-        fn data_ptr(&'a self, offset: usize) -> (*const f64, Self::Lifetime) {
-            (unsafe { self.data.as_ptr().add(offset) }, ())
+        unsafe fn data_ptr(&mut self, offset: usize) -> (*const f64, Self::Lifetime) {
+            unsafe { (self.data.as_ptr().add(offset), ()) }
         }
 
         fn layout(&self) -> &LibxcTensorLayout {
@@ -96,16 +122,12 @@ mod cpu_tensor {
         }
     }
 
-    #[duplicate_item(TYPE; [Vec<f64>]; [&'a mut [f64]];)]
-    impl<'a, S> LibxcTensorMutAPI<'a> for LibxcTensor<TYPE, S> {
-        fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
-            (unsafe { self.data.as_mut_ptr().add(offset) }, ())
+    #[duplicate_item(TYPE; [LibxcTensorCpu]; [LibxcTensorCpuMut<'_>];)]
+    impl LibxcTensorMutAPI<'_> for TYPE {
+        unsafe fn data_mut_ptr(&mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
+            unsafe { (self.data.as_mut_ptr().add(offset), ()) }
         }
     }
-
-    pub type LibxcTensorCpu = LibxcTensor<Vec<f64>, ()>;
-    pub type LibxcTensorCpuView<'a> = LibxcTensor<&'a [f64], ()>;
-    pub type LibxcTensorCpuMut<'a> = LibxcTensor<&'a mut [f64], ()>;
 }
 
 #[cfg(feature = "cuda")]
@@ -114,13 +136,19 @@ mod cuda_tensor {
     use cudarc::driver::*;
     use std::sync::Arc;
 
-    #[duplicate_item(TYPE; [CudaSlice<f64>]; [CudaView<'a, f64>]; [CudaViewMut<'a, f64>];)]
-    impl<'a, S> LibxcTensorViewAPI<'a> for LibxcTensor<TYPE, S> {
+    pub type LibxcTensorCuda = LibxcTensorBase<CudaSlice<f64>, Arc<CudaStream>>;
+    pub type LibxcTensorCudaView<'a> = LibxcTensorBase<CudaView<'a, f64>, Arc<CudaStream>>;
+    pub type LibxcTensorCudaMut<'a> = LibxcTensorBase<CudaViewMut<'a, f64>, Arc<CudaStream>>;
+
+    #[duplicate_item(TYPE; [LibxcTensorCuda]; [LibxcTensorCudaView<'_>]; [LibxcTensorCudaMut<'_>];)]
+    impl<'a> LibxcTensorViewAPI<'a> for TYPE {
         type Lifetime = SyncOnDrop<'a>;
 
-        fn data_ptr(&'a self, offset: usize) -> (*const f64, Self::Lifetime) {
-            let (cu_device_ptr, sync_on_drop) = self.data.device_ptr(self.data.stream());
-            (unsafe { (cu_device_ptr as usize as *const f64).add(offset) }, sync_on_drop)
+        unsafe fn data_ptr(&'a mut self, offset: usize) -> (*const f64, Self::Lifetime) {
+            let stream = self.stream.get_or_insert_with(|| self.data.stream().clone());
+            let (cu_device_ptr, sync_on_drop) = self.data.device_ptr(stream);
+            let data_ptr = unsafe { (cu_device_ptr as usize as *const f64).add(offset) };
+            (data_ptr, sync_on_drop)
         }
 
         fn layout(&self) -> &LibxcTensorLayout {
@@ -128,21 +156,36 @@ mod cuda_tensor {
         }
     }
 
-    #[duplicate_item(TYPE; [CudaSlice<f64>]; [CudaViewMut<'a, f64>];)]
-    impl<'a> LibxcTensorMutAPI<'a> for LibxcTensor<TYPE, Arc<CudaStream>> {
-        fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
-            self.stream = Some(self.data.stream().clone());
-            let (cu_device_ptr, sync_on_drop) =
-                self.data.device_ptr_mut(self.stream.as_ref().unwrap());
-            (unsafe { (cu_device_ptr as usize as *mut f64).add(offset) }, sync_on_drop)
+    #[duplicate_item(TYPE; [LibxcTensorCuda]; [LibxcTensorCudaMut<'a>];)]
+    impl<'a> LibxcTensorMutAPI<'a> for TYPE {
+        unsafe fn data_mut_ptr(&'a mut self, offset: usize) -> (*mut f64, Self::Lifetime) {
+            let stream = self.stream.get_or_insert_with(|| self.data.stream().clone());
+            let (cu_device_ptr, sync_on_drop) = self.data.device_ptr_mut(stream);
+            let data_ptr = unsafe { (cu_device_ptr as usize as *mut f64).add(offset) };
+            (data_ptr, sync_on_drop)
         }
     }
-
-    pub type LibxcTensorCuda = LibxcTensor<CudaSlice<f64>, Arc<CudaStream>>;
-    pub type LibxcTensorCudaView<'a> = LibxcTensor<CudaView<'a, f64>, Arc<CudaStream>>;
-    pub type LibxcTensorCudaMut<'a> = LibxcTensor<CudaViewMut<'a, f64>, Arc<CudaStream>>;
 }
 
 pub use cpu_tensor::*;
 #[cfg(feature = "cuda")]
 pub use cuda_tensor::*;
+
+#[cfg(feature = "cuda")]
+#[test]
+fn playground() {
+    use cudarc::driver::*;
+
+    // define a cuda 1-d tensor [1, 2, 3] and get its data pointer
+    let ctx = CudaContext::new(0).unwrap();
+    let stream = ctx.default_stream();
+    let data = stream.clone_htod(&vec![1.0, 2.0, 4.0]).unwrap();
+    let data = data.as_view();
+    let mut tensor = LibxcTensorCudaView {
+        data,
+        layout: LibxcTensorLayout { shape: vec![3], stride: vec![1], offset: 0 },
+        stream: None,
+    };
+    let data_ptr = unsafe { tensor.data_ptr(0) };
+    println!("Data pointer: {:p}", data_ptr.0);
+}
