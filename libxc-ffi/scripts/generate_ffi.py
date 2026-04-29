@@ -133,6 +133,58 @@ def remove_xc_version_constants(token):
     return '\n'.join(result)
 
 
+def add_struct_version_attributes(token, struct_changes):
+    """Add #[cfg(feature = "...")] attributes to struct fields that differ between versions.
+
+    struct_changes is a dict like:
+        {"v7_0": {"xc_func_type": ["ext_params"]}}
+
+    For each field listed, a #[cfg(feature = "api-vX_Y")] attribute is added
+    before the field declaration.
+    """
+    # Build a flat map: (struct_name, field_name) -> feature_name
+    field_cfg_map = {}
+    for version_suffix, structs in struct_changes.items():
+        feature = get_feature_for_version(version_suffix)
+        for struct_name, fields in structs.items():
+            for field_name in fields:
+                field_cfg_map[(struct_name, field_name)] = feature
+
+    if not field_cfg_map:
+        return token
+
+    lines = token.split('\n')
+    result_lines = []
+    current_struct = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Track which struct we're inside
+        struct_match = re.match(r'^pub struct (\w+)', stripped)
+        if struct_match:
+            current_struct = struct_match.group(1)
+
+        # Detect closing brace of struct
+        if current_struct and stripped == '}':
+            current_struct = None
+
+        # Check if this line is a struct field
+        if current_struct:
+            field_match = re.match(r'^(\s+)pub (\w+):', line)
+            if field_match:
+                indent = field_match.group(1)
+                field_name = field_match.group(2)
+                key = (current_struct, field_name)
+                if key in field_cfg_map:
+                    feature = field_cfg_map[key]
+                    result_lines.append(f'{indent}#[cfg(feature = "{feature}")]')
+
+        result_lines.append(line)
+
+    return '\n'.join(result_lines)
+
+
 def add_version_attributes(token, func_cfg_map):
     """Add #[cfg(feature = "api-vX_Y")] attributes to extern functions."""
 
@@ -187,6 +239,7 @@ def generate_static_ffi(token, func_cfg_map):
     """Generate ffi_xc_static.rs content from bindgen output."""
     token = token.replace("::core::ffi::", "")
     token = remove_xc_version_constants(token)
+    token = add_struct_version_attributes(token, version_struct_changes)
     token = add_version_attributes(token, func_cfg_map)
 
     feature_docs = """//! FFI bindings for libxc (xc.h).
@@ -334,6 +387,9 @@ def dyload_main(token):
 
     # Remove xc_version.h constants from ffi_base too
     token_ffi_base = remove_xc_version_constants(token_ffi_base)
+
+    # Add version-gated cfg attributes to struct fields
+    token_ffi_base = add_struct_version_attributes(token_ffi_base, version_struct_changes)
 
     output_ffi_base = f"""//! Base types and imports for FFI.
 //!

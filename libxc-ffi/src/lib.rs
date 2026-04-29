@@ -26,6 +26,8 @@
 //! The [`xc_funcs`] module provides versioned enums for functional identifiers
 //! (e.g., `XcFuncId::LDA_X = 1`).
 
+#![allow(non_snake_case)]
+
 // Static FFI bindings
 #[cfg(not(feature = "dynamic_loading"))]
 pub mod ffi_xc_static;

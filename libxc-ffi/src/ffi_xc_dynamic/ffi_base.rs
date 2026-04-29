@@ -327,6 +327,7 @@ pub struct xc_func_type {
     pub nlc_b: f64,
     pub nlc_C: f64,
     pub dim: xc_dimensions,
+    #[cfg(feature = "api-v7_0")]
     pub ext_params: *mut f64,
     pub params: *mut ::core::ffi::c_void,
     pub dens_threshold: f64,
