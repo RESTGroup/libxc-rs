@@ -129,11 +129,46 @@ pub struct LibXCFunctional {
 
 /// Creation functions implementation.
 impl LibXCFunctional {
-    /// Create a new functional from a functional ID and spin configuration.
+    /// Create a new functional from a name string and spin configuration.
     ///
-    /// For api-v7.1+, uses `xc_func_init_flags` with `OnHost`.
-    /// For earlier versions, uses `xc_func_init`.
-    pub fn from_id(func_id: i32, spin: LibXCSpin) -> Result<Self, LibXCError> {
+    /// This function will use the default device (CPU/host or GPU/device),
+    /// which is determined at compile-time.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::*; // will import LibXCFunctional, LibXCSpin
+    /// use libxc_enum_items::*; // will also import Unpolarized = LibXCSpin::Unpolarized
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `pylibxc.functional.LibXCFunctional.__init__`
+    ///
+    /// Note that we currently have not implemented the `flag` argument from
+    /// PyLibxc, which allows users to specify the device (e.g. CPU vs GPU) at
+    /// runtime.
+    pub fn from_identifier(name: &str, spin: LibXCSpin) -> Self {
+        Self::from_identifier_f(name, spin).unwrap()
+    }
+
+    /// Create a new functional from a name string and spin configuration
+    /// (fallible).
+    pub fn from_identifier_f(name: &str, spin: LibXCSpin) -> Result<Self, LibXCError> {
+        let func_id = crate::util::libxc_functional_get_number(name)
+            .ok_or_else(|| LibXCError::NotFound(format!("functional '{name}'")))?;
+        Self::from_number_f(func_id, spin)
+    }
+
+    /// Create a new functional from a functional ID and spin configuration.
+    pub fn from_number(func_id: i32, spin: LibXCSpin) -> Self {
+        Self::from_number_f(func_id, spin).unwrap()
+    }
+
+    /// Create a new functional from a functional ID and spin configuration
+    /// (fallible).
+    pub fn from_number_f(func_id: i32, spin: LibXCSpin) -> Result<Self, LibXCError> {
         unsafe {
             let ptr = ffi::xc_func_alloc();
             if ptr.is_null() {
@@ -148,29 +183,13 @@ impl LibXCFunctional {
         }
     }
 
-    /// Create a new functional from a name string and spin configuration.
-    pub fn from_identifier(name: &str, spin: LibXCSpin) -> Result<Self, LibXCError> {
-        let func_id = crate::util::libxc_functional_get_number(name)
-            .ok_or_else(|| LibXCError::NotFound(format!("functional '{name}'")))?;
-        Self::from_id(func_id, spin)
-    }
-
-    #[cfg(feature = "api-v7_1")]
-    unsafe fn init_func(ptr: *mut ffi::xc_func_type, func_id: i32, spin: LibXCSpin) -> c_int {
-        let flags = ffi::XC_FLAGS_ON_HOST as c_int;
-        ffi::xc_func_init_flags(ptr, func_id as c_int, spin as c_int, flags)
-    }
-
-    #[cfg(not(feature = "api-v7_1"))]
     unsafe fn init_func(ptr: *mut ffi::xc_func_type, func_id: i32, spin: LibXCSpin) -> c_int {
         ffi::xc_func_init(ptr, func_id as c_int, spin as c_int)
     }
 }
 
-/// Information getters and setters implementation.
+/// Information of functional (non-settable).
 impl LibXCFunctional {
-    /* #region info getters */
-
     /// Returns a raw pointer to the underlying `xc_func_type`.
     ///
     /// Intended for advanced use; the caller must not free the pointer.
@@ -186,11 +205,35 @@ impl LibXCFunctional {
     }
 
     /// Functional number (ID).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// assert_eq!(xc_func.number(), 136);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_number()`
     pub fn number(&self) -> i32 {
         unsafe { ffi::xc_func_info_get_number(self.info()) as i32 }
     }
 
     /// Functional kind (exchange, correlation, etc.).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// assert_eq!(xc_func.kind(), LibXCFunctionalKind::Correlation);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_kind()`
     pub fn kind(&self) -> LibXCFunctionalKind {
         let k = unsafe { ffi::xc_func_info_get_kind(self.info()) } as u32;
         match k {
@@ -198,21 +241,57 @@ impl LibXCFunctional {
             ffi::XC_CORRELATION => LibXCFunctionalKind::Correlation,
             ffi::XC_EXCHANGE_CORRELATION => LibXCFunctionalKind::ExchangeCorrelation,
             ffi::XC_KINETIC => LibXCFunctionalKind::Kinetic,
-            _ => LibXCFunctionalKind::Exchange, // fallback
+            _ => panic!("Unknown functional kind code: {k}"),
         }
     }
 
-    /// Functional name.
+    /// Functional standard name identifier.
+    ///
+    /// This is also what you would pass to `from_identifier` to create the same
+    /// functional, and is the canonical name for this functional in libxc.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// assert_eq!(xc_func.identifier(), "gga_c_xpbe");
+    /// ```
     pub fn identifier(&self) -> String {
         unsafe { cstr_to_string(ffi::xc_functional_get_name(self.number())) }
     }
 
-    /// Functional name.
+    /// Functional name for display purposes.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// println!("{:?}", xc_func.info_name());
+    /// // output: "Extended PBE by Xu & Goddard III"
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_name()`
     pub fn info_name(&self) -> String {
         unsafe { cstr_to_string(ffi::xc_func_info_get_name(self.info())) }
     }
 
     /// Functional family (LDA, GGA, MGGA, etc.).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// assert_eq!(xc_func.family(), LibXCFamily::GGA);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_family()`
     pub fn family(&self) -> LibXCFamily {
         let f = unsafe { ffi::xc_func_info_get_family(self.info()) } as u32;
         match f {
@@ -229,67 +308,174 @@ impl LibXCFunctional {
     }
 
     /// Functional flags as bitflags.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// println!("{:?}", xc_func.flags());
+    /// // Example output
+    /// // v7.0 BitFlags<LibXCFlags>(0b100000000010011111, HaveEXC | HaveVXC | HaveFXC | HaveKXC | HaveLXC | Dim3 | EnforceFHC)
+    /// // v7.1 BitFlags<LibXCFlags>(0b1100000000010001111, HaveEXC | HaveVXC | HaveFXC | HaveKXC | Dim3 | EnforceFHC | OnDevice)
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// Returned results will differ between libxc versions (v7.0 does not have
+    /// `OnDevice` flag), build configurations (LXC may not available if not
+    /// configured with `--enable-lxc`), and default device may not be on CPU
+    /// (`OnDevice` or `OnHost`).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_flags()`
     pub fn flags(&self) -> BitFlags<LibXCFlags> {
         let f = unsafe { ffi::xc_func_info_get_flags(self.info()) };
         BitFlags::from_bits(f as u32).unwrap_or_else(|_| BitFlags::empty())
     }
 
-    /// Number of spin channels (1 = unpolarized, 2 = polarized).
-    pub fn nspin(&self) -> i32 {
-        unsafe { (*self.ptr).nspin }
+    /// Spin channels.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// assert_eq!(xc_func.spin(), LibXCSpin::Unpolarized);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.xc_func.contents.nspin`
+    pub fn spin(&self) -> LibXCSpin {
+        match unsafe { (*self.ptr).nspin as u32 } {
+            ffi::XC_UNPOLARIZED => LibXCSpin::Unpolarized,
+            ffi::XC_POLARIZED => LibXCSpin::Polarized,
+            n => panic!("Unknown spin code: {n}"),
+        }
     }
 
     /// Reference to the dimension struct from libxc.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// let dim = xc_func.dim();
+    /// // output: xc_dimensions { rho: 1, sigma: 1, lapl: 0, tau: 0, zk: 1, vrho: 1, ... }
     pub fn dim(&self) -> &ffi::xc_dimensions {
         unsafe { &(*self.ptr).dim }
     }
-
-    /* #endregion */
-
-    /* #region convenience flag getters */
 
     fn has_flag(&self, flag: LibXCFlags) -> bool {
         self.flags().contains(flag)
     }
 
     /// Whether this functional can compute the energy density (exc).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._has_exc`
     pub fn has_exc(&self) -> bool {
         self.has_flag(LibXCFlags::HaveEXC)
     }
+
     /// Whether this functional can compute the first derivative (vxc).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._has_vxc`
     pub fn has_vxc(&self) -> bool {
         self.has_flag(LibXCFlags::HaveVXC)
     }
+
     /// Whether this functional can compute the second derivative (fxc).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._has_fxc`
     pub fn has_fxc(&self) -> bool {
         self.has_flag(LibXCFlags::HaveFXC)
     }
+
     /// Whether this functional can compute the third derivative (kxc).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._has_kxc`
     pub fn has_kxc(&self) -> bool {
         self.has_flag(LibXCFlags::HaveKXC)
     }
+
     /// Whether this functional can compute the fourth derivative (lxc).
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._has_lxc`
     pub fn has_lxc(&self) -> bool {
         self.has_flag(LibXCFlags::HaveLXC)
     }
+
     /// Whether this functional requires the laplacian.
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._needs_laplacian`
     pub fn needs_laplacian(&self) -> bool {
         self.has_flag(LibXCFlags::NeedsLaplacian)
     }
+
     /// Whether this functional requires the kinetic energy density.
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._needs_tau`
     pub fn needs_tau(&self) -> bool {
         self.has_flag(LibXCFlags::NeedsTau)
     }
+
     /// Whether this is a CAM range-separated hybrid.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_cam_b3lyp", Unpolarized);
+    /// assert!(xc_func.is_hyb_cam());
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_cam_b3lyp", Unpolarized);
+    /// assert!(xc_func.is_hyb_cam());
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional._is_hyb_cam`
     pub fn is_hyb_cam(&self) -> bool {
         self.has_flag(LibXCFlags::HybCAM)
+            || self.has_flag(LibXCFlags::HybCAMY)
+            || self.has_flag(LibXCFlags::HybLC)
+            || self.has_flag(LibXCFlags::HybLCY)
     }
 
-    /* #endregion */
-
-    // -- References ---------------------------------------------------------
-
     /// Returns the literature references for this functional.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:#?}", xc_func.references());
+    /// // Output:
+    /// // [
+    /// //     LibXCReference {
+    /// //         ref_text: "W. Ai, W.-H. Fang, and N. Q. Su,  J. Phys. Chem. Lett. 12, 1207–1213 (2021)",
+    /// //         doi: "10.1021/acs.jpclett.0c03621",
+    /// //         bibtex: "@article{Ai2021_1207,\n  author = {Ai, Wenna and Fang, Wei-Hai and Su, Neil Qiang},\n  title = {The Role of Range-Separated Correlation in Long-Range Corrected Hybrid Functionals},\n  journal = {J. Phys. Chem. Lett.},\n  volume = {12},\n  pages = {1207--1213},\n  year = {2021},\n  doi = {10.1021/acs.jpclett.0c03621},\n  url = {https://doi.org/10.1021/acs.jpclett.0c03621}\n}\n",
+    /// //         key: "Ai2021_1207",
+    /// //     },
+    /// // ]
+    /// ```
     pub fn references(&self) -> Vec<LibXCReference> {
         let mut refs = Vec::new();
         for i in 0..(ffi::XC_MAX_REFERENCES as i32) {
@@ -307,14 +493,104 @@ impl LibXCFunctional {
         refs
     }
 
-    // -- External parameters ------------------------------------------------
+    /// Returns a multi-line description of this functional.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:}", xc_func.describe());
+    /// // Output:
+    /// // ID Number      : 624
+    /// // Identifier     : gga_c_lypr
+    /// // Description    : Short-range LYP by Ai, Fang, and Su
+    /// // Attributes
+    /// //     Kind       : Correlation
+    /// //     Family     : GGA
+    /// //     Spin       : Unpolarized
+    /// // Flags
+    /// //     Derivative : HaveEXC | HaveVXC | HaveFXC | HaveKXC
+    /// //     Dimension  : Dim3
+    /// //     CAM        : <empty>
+    /// //     VV10       : <empty>
+    /// //     MGGA       : EnforceFHC
+    /// //     Device     : OnDevice
+    /// // References
+    /// //     - W. Ai, W.-H. Fang, and N. Q. Su,  J. Phys. Chem. Lett. 12, 1207–1213 (2021)
+    /// //       DOI: 10.1021/acs.jpclett.0c03621
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.describe()`
+    pub fn describe(&self) -> String {
+        use crate::enums::libxc_enum_items::*;
 
+        let flag_all_deriv = HaveEXC | HaveVXC | HaveFXC | HaveKXC | HaveLXC;
+        let flag_all_dim = Dim1 | Dim2 | Dim3;
+        let flag_all_cam = HybCAM | HybCAMY | HybLC | HybLCY;
+        let flag_vv10 = VV10;
+        let flag_all_mgga = NeedsLaplacian | NeedsTau | EnforceFHC;
+        let flag_all_device = OnHost | OnDevice;
+
+        let references = self.references();
+
+        let mut lst = vec![
+            format!("ID Number      : {}", self.number()),
+            format!("Identifier     : {}", self.identifier()),
+            format!("Description    : {}", self.info_name()),
+            "Attributes".to_string(),
+            format!("    Kind       : {:?}", self.kind()),
+            format!("    Family     : {:?}", self.family()),
+            format!("    Spin       : {:?}", self.spin()),
+            "Flags".to_string(),
+            format!("    Derivative : {}", self.flags() & flag_all_deriv),
+            format!("    Dimension  : {}", self.flags() & flag_all_dim),
+            format!("    CAM        : {}", self.flags() & flag_all_cam),
+            format!("    VV10       : {}", self.flags() & flag_vv10),
+            format!("    MGGA       : {}", self.flags() & flag_all_mgga),
+            format!("    Device     : {}", self.flags() & flag_all_device),
+        ];
+        if !references.is_empty() {
+            lst.push("References".to_string());
+            for r in references {
+                lst.extend([format!("    - {}", r.ref_text), format!("      DOI: {}", r.doi)]);
+            }
+        }
+        lst.join("\n")
+    }
+}
+
+/// External parameters getter and setter.
+impl LibXCFunctional {
     /// Number of external parameters for this functional.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// assert_eq!(xc_func.n_ext_params(), 7);
+    /// ```
     pub fn n_ext_params(&self) -> i32 {
         unsafe { ffi::xc_func_info_get_n_ext_params(self.info()) as i32 }
     }
 
     /// Names of the external parameters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:?}", xc_func.ext_param_names());
+    /// // Output: ["_a", "_b", "_c", "_d", "_m1", "_m2", "_omega"]
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_ext_param_names()`
     pub fn ext_param_names(&self) -> Vec<String> {
         let n = self.n_ext_params();
         (0..n)
@@ -325,6 +601,19 @@ impl LibXCFunctional {
     }
 
     /// Descriptions of the external parameters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:?}", xc_func.ext_param_descriptions());
+    /// // Output: ["Parameter a", "Parameter b", "Parameter c", "Parameter d", "Parameter m1", "Parameter m2", "Range-separation parameter"]
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_ext_param_descriptions()`
     pub fn ext_param_descriptions(&self) -> Vec<String> {
         let n = self.n_ext_params();
         (0..n)
@@ -338,6 +627,19 @@ impl LibXCFunctional {
     }
 
     /// Default values of the external parameters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:7.4?}", xc_func.ext_param_default_values());
+    /// // Output: [ 0.0492,  0.1320,  0.2533,  0.3490,  0.1528,  0.8734,  0.3300]
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_ext_param_default_values()`
     pub fn ext_param_default_values(&self) -> Vec<f64> {
         let n = self.n_ext_params();
         (0..n)
@@ -347,13 +649,170 @@ impl LibXCFunctional {
             .collect()
     }
 
-    // -- Setters ------------------------------------------------------------
+    /// Current values of the external parameters.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// xc_func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// assert_eq!(xc_func.ext_param_values(), &[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    pub fn ext_param_values(&self) -> Vec<f64> {
+        let n = self.n_ext_params();
+        (0..n).map(|i| unsafe { ffi::xc_func_get_ext_params_value(self.ptr, i as c_int) }).collect()
+    }
+
+    /// Returns a map of external parameter names to their (default value,
+    /// description).
+    ///
+    /// # Note
+    ///
+    /// This function returns **default** values. These values will not be
+    /// changed, even user sets custom parameters. See
+    /// [`LibXCFunctional::ext_param_values`] for current values.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// for (key, val) in xc_func.ext_param_default_map() {
+    ///     println!("{key:>10}: {val:?}");
+    /// }
+    /// // Output:
+    /// //     _a: (0.04918, "Parameter a")
+    /// //     _b: (0.132, "Parameter b")
+    /// //     _c: (0.2533, "Parameter c")
+    /// //     _d: (0.349, "Parameter d")
+    /// //    _m1: (0.15283842794759825, "Parameter m1")
+    /// //    _m2: (0.8733624454148472, "Parameter m2")
+    /// // _omega: (0.33, "Range-separation parameter")
+    /// ```
+    pub fn ext_param_default_map(&self) -> IndexMap<String, (f64, String)> {
+        let names = self.ext_param_names();
+        let descriptions = self.ext_param_descriptions();
+        let default_values = self.ext_param_default_values();
+        let mut map = IndexMap::new();
+        for i in 0..names.len() {
+            map.insert(names[i].clone(), (default_values[i], descriptions[i].clone()));
+        }
+        map
+    }
+
+    /// Returns a map of external parameter names to their current values.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// xc_func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// for (key, val) in xc_func.ext_param_map() {
+    ///     println!("{key:>10}: {val}");
+    /// }
+    /// // Output:
+    /// //     _a: 0.1
+    /// //     _b: 0.1
+    /// //     _c: 0.2
+    /// //     _d: 0.3
+    /// //    _m1: 0.2
+    /// //    _m2: 0.8
+    /// // _omega: 0.5
+    /// ```
+    pub fn ext_param_map(&self) -> IndexMap<String, f64> {
+        let names = self.ext_param_names();
+        let values = self.ext_param_values();
+        let mut map = IndexMap::new();
+        for i in 0..names.len() {
+            map.insert(names[i].clone(), values[i]);
+        }
+        map
+    }
 
     /// Set all external parameters at once.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the length of `params` does not match the number of external
+    /// parameters expected by this functional.
     pub fn set_ext_params(&mut self, params: &[f64]) {
+        let n = self.n_ext_params() as usize;
+        assert_eq!(params.len(), n, "Expected {} external parameters, got {}", n, params.len());
         unsafe {
             ffi::xc_func_set_ext_params(self.ptr, params.as_ptr());
         }
+    }
+
+    /// Set external parameters using a map of parameter names to values.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// use std::collections::HashMap; // other map types like BTreeMap, IndexMap also work
+    /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// let update_ext_param_map = HashMap::from([("_a", 0.1), ("_d", 0.2), ("_omega", 0.58)]);
+    /// xc_func.set_ext_param_map(update_ext_param_map.iter());
+    /// for (key, val) in xc_func.ext_param_map() {
+    ///     println!("{key:>10}: {val}");
+    /// }
+    /// // Output:
+    /// //     _a: 0.1
+    /// //     _b: 0.132
+    /// //     _c: 0.2533
+    /// //     _d: 0.2
+    /// //    _m1: 0.15283842794759825
+    /// //    _m2: 0.8733624454148472
+    /// // _omega: 0.58
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if any parameter name in `param_map` does not match the external
+    /// parameters of this functional.
+    pub fn set_ext_param_map(
+        &mut self,
+        param_map: impl Iterator<Item = (impl AsRef<str>, impl Borrow<f64>)>,
+    ) {
+        self.set_ext_param_map_f(param_map).unwrap()
+    }
+
+    /// Set external parameters using a map of parameter names to values
+    /// (fallible).
+    pub fn set_ext_param_map_f(
+        &mut self,
+        param_map: impl Iterator<Item = (impl AsRef<str>, impl Borrow<f64>)>,
+    ) -> Result<(), LibXCError> {
+        let mut map = self.ext_param_map();
+        for (key, val) in param_map.into_iter() {
+            let (key, val) = (key.as_ref(), *val.borrow());
+            if !map.contains_key(key) {
+                return Err(LibXCError::NotFound(format!("external parameter '{key}' not found")));
+            }
+            map.insert(key.to_string(), val);
+        }
+        let params: Vec<f64> = map.values().cloned().collect();
+        self.set_ext_params(&params);
+        Ok(())
+    }
+}
+
+/// Setters for thresholds.
+impl LibXCFunctional {
+    /// Density threshold for numerical stability (usually smaller than 1e-10).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// println!("{:?}", xc_func.dens_threshold()); // 1e-14
+    /// let xc_func = LibXCFunctional::from_identifier("gga_c_xpbe", Unpolarized);
+    /// println!("{:?}", xc_func.dens_threshold()); // 1e-12
+    /// ```
+    pub fn dens_threshold(&self) -> f64 {
+        unsafe { (*self.ptr).dens_threshold }
     }
 
     /// Set the density threshold.
@@ -361,14 +820,29 @@ impl LibXCFunctional {
         unsafe { ffi::xc_func_set_dens_threshold(self.ptr, threshold) }
     }
 
+    /// Zeta (spin polarization) threshold for numerical stability.
+    pub fn zeta_threshold(&self) -> f64 {
+        unsafe { (*self.ptr).zeta_threshold }
+    }
+
     /// Set the zeta (spin polarization) threshold.
     pub fn set_zeta_threshold(&mut self, threshold: f64) {
         unsafe { ffi::xc_func_set_zeta_threshold(self.ptr, threshold) }
     }
 
+    /// Sigma (reduced gradient) threshold for numerical stability.
+    pub fn sigma_threshold(&self) -> f64 {
+        unsafe { (*self.ptr).sigma_threshold }
+    }
+
     /// Set the sigma (reduced gradient) threshold.
     pub fn set_sigma_threshold(&mut self, threshold: f64) {
         unsafe { ffi::xc_func_set_sigma_threshold(self.ptr, threshold) }
+    }
+
+    /// Tau (kinetic energy density) threshold for numerical stability.
+    pub fn tau_threshold(&self) -> f64 {
+        unsafe { (*self.ptr).tau_threshold }
     }
 
     /// Set the tau (kinetic energy density) threshold.
@@ -381,9 +855,9 @@ impl LibXCFunctional {
     pub fn set_fhc_enforcement(&mut self, on: bool) {
         unsafe { ffi::xc_func_set_fhc_enforcement(self.ptr, on as c_int) }
     }
+}
 
-    // -- Hybrid functional info ---------------------------------------------
-
+impl LibXCFunctional {
     /// Fraction of Hartree-Fock exchange for global hybrids.
     pub fn hyb_exx_coef(&self) -> f64 {
         unsafe { ffi::xc_hyb_exx_coef(self.ptr) }
@@ -753,7 +1227,7 @@ impl core::fmt::Debug for LibXCFunctional {
             .field("name", &self.identifier())
             .field("number", &self.number())
             .field("family", &self.family())
-            .field("spin", &self.nspin())
+            .field("spin", &self.spin())
             .finish()
     }
 }

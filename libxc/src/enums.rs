@@ -68,3 +68,13 @@ pub enum LibXCFlags {
     OnDevice = ffi::XC_FLAGS_ON_DEVICE,
     OnHost = ffi::XC_FLAGS_ON_HOST,
 }
+
+/// Re-export all enum items for easy access.
+pub mod libxc_enum_items {
+    use super::*;
+    pub use LibXCFamily::*;
+    pub use LibXCFlags::*;
+    pub use LibXCFunctionalKind::*;
+    pub use LibXCRelavistic::*;
+    pub use LibXCSpin::*;
+}

@@ -16,6 +16,7 @@ libxc-ffi = { workspace = true }
 duplicate = { version = "2.0" }
 enumflags2 = { version = "0.7" }
 libc = { version = "0.2" }
+indexmap = { version = "2.14" }
 cudarc = { version = "0.19", optional = true }
 
 [features]

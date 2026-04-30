@@ -138,7 +138,7 @@ impl LibXCFunctional {
         flags: &LibXCDerivativeFlags,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         self.validate_flags(flags)?;
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
@@ -180,7 +180,7 @@ impl LibXCFunctional {
         input: &LibXCLdaInput,
         output: &mut LibXCLdaOutputMut,
     ) -> Result<(), LibXCError> {
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
@@ -244,7 +244,7 @@ impl LibXCFunctional {
         flags: &LibXCDerivativeFlags,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         self.validate_flags(flags)?;
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
@@ -305,7 +305,7 @@ impl LibXCFunctional {
         input: &LibXCGgaInput,
         output: &mut LibXCGgaOutputMut,
     ) -> Result<(), LibXCError> {
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
@@ -397,7 +397,7 @@ impl LibXCFunctional {
         flags: &LibXCDerivativeFlags,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         self.validate_flags(flags)?;
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
@@ -554,7 +554,7 @@ impl LibXCFunctional {
         input: &LibXCMggaInput,
         output: &mut LibXCMggaOutputMut,
     ) -> Result<(), LibXCError> {
-        let nspin = self.nspin() as usize;
+        let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
