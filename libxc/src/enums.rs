@@ -36,6 +36,13 @@ pub enum LibXCFamily {
     HybLDA = ffi::XC_FAMILY_HYB_LDA,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[repr(u32)]
+pub enum LibXCDeviceFlag {
+    OnDevice = ffi::XC_FLAGS_ON_DEVICE,
+    OnHost = ffi::XC_FLAGS_ON_HOST,
+}
+
 #[enumflags2::bitflags]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]

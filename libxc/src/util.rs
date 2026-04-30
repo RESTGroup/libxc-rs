@@ -95,3 +95,17 @@ pub fn libxc_available_functional_names() -> Vec<String> {
     }
     name_ptrs.into_iter().map(|ptr| unsafe { cstr_to_string(ptr) }).collect()
 }
+
+/// Print the library path of dynamic loading / static linking.
+pub fn print_library_path() {
+    #[cfg(feature = "dynamic_loading")]
+    {
+        println!("libxc is dynamically loaded from: {:?}", unsafe {
+            &ffi::dyload_lib().__libraries_path
+        });
+    }
+    #[cfg(not(feature = "dynamic_loading"))]
+    {
+        println!("libxc is statically linked, please manually use ldd the binary to check the libxc path.");
+    }
+}
