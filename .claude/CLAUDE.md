@@ -59,4 +59,4 @@ We will save libxc headers in folder `libxc-ffi/headers`.
 - `xc_funcs_<version>.h` contains the function declarations (const usize numbers) and minimal documentation for each functional. Different versions of libxc tags will be applied. This can contained at folder `xc_funcs`, defined as numbered enum (for future simplicity of parsing/serde).
 - `versioning_xc.md` contains the detailed changes of libxc API for each version. This file is structured and maintained by human developer. Use `## Introduced in v<version>` to check what functions are introduced in each version (and can used for script to parse).
 
-To generate the FFI bindings, use python scripts in `libxc-ffi/scripts`, with help of tree-sitter and bindgen. The FFI bindgen must be generated automatically, without manual modification.
+To generate the FFI bindings, use python scripts in `libxc-ffi/scripts`, with help of tree-sitter and bindgen. **The FFI bindgen must be generated automatically, without manual modification.** Exception is `ffi_xc_dynamic/mod.rs`, which can be manually modified.
