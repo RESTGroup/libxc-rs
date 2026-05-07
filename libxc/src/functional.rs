@@ -369,7 +369,8 @@ impl LibXCFunctional {
         unsafe { &(*self.ptr).dim }
     }
 
-    fn has_flag(&self, flag: LibXCFlags) -> bool {
+    /// Whether this functional has a specific flag.
+    pub(crate) fn has_flag(&self, flag: LibXCFlags) -> bool {
         self.flags().contains(flag)
     }
 
@@ -857,57 +858,177 @@ impl LibXCFunctional {
     }
 }
 
+/// Getters for hybrid/cam/VV10 coefficients and auxiliary functionals.
 impl LibXCFunctional {
     /// Fraction of Hartree-Fock exchange for global hybrids.
-    pub fn hyb_exx_coef(&self) -> f64 {
-        unsafe { ffi::xc_hyb_exx_coef(self.ptr) }
+    ///
+    /// Please note that this is only applicable for global hybrids (HybGGA,
+    /// HybMGGA, HybLDA), and will return `None` for other functionals,
+    /// including pure functionals and **range-separated hybrids**. For
+    /// range-separated hybrids, use `cam_coef()` to get the CAM
+    /// coefficients instead.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_x3lyp", Unpolarized);
+    /// assert_eq!(xc_func.hyb_exx_coef(), Some(0.218));
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_wb97x", Unpolarized);
+    /// assert_eq!(xc_func.hyb_exx_coef(), None);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_hyb_exx_coef`
+    pub fn hyb_exx_coef(&self) -> Option<f64> {
+        if matches!(self.family(), LibXCFamily::HybGGA | LibXCFamily::HybMGGA | LibXCFamily::HybLDA)
+            && !self.is_hyb_cam()
+        {
+            Some(unsafe { ffi::xc_hyb_exx_coef(self.ptr) })
+        } else {
+            None
+        }
     }
 
     /// Range-separated hybrid coefficients (omega, alpha, beta).
-    pub fn cam_coef(&self) -> (f64, f64, f64) {
-        let mut omega: f64 = 0.0;
-        let mut alpha: f64 = 0.0;
-        let mut beta: f64 = 0.0;
-        unsafe {
-            ffi::xc_hyb_cam_coef(self.ptr, &mut omega, &mut alpha, &mut beta);
+    ///
+    /// Only applicable for CAM hybrids (HybGGA, HybMGGA, HybLDA with CAM
+    /// flags), and will return `None` for other functionals, including pure
+    /// functionals and global hybrids. For global hybrids, use `hyb_exx_coef()`
+    /// to get the fraction of Hartree-Fock exchange instead.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_x3lyp", Unpolarized);
+    /// assert_eq!(xc_func.cam_coef(), None);
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_wb97x", Unpolarized);
+    /// assert_eq!(xc_func.cam_coef(), Some((0.3, 1.0, -0.842294)));
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_cam_coef()`
+    pub fn cam_coef(&self) -> Option<(f64, f64, f64)> {
+        if matches!(self.family(), LibXCFamily::HybGGA | LibXCFamily::HybMGGA | LibXCFamily::HybLDA)
+            && self.is_hyb_cam()
+        {
+            let mut omega: f64 = 0.0;
+            let mut alpha: f64 = 0.0;
+            let mut beta: f64 = 0.0;
+            unsafe { ffi::xc_hyb_cam_coef(self.ptr, &mut omega, &mut alpha, &mut beta) };
+            Some((omega, alpha, beta))
+        } else {
+            None
         }
-        (omega, alpha, beta)
     }
 
     /// VV10 non-local correlation coefficients (nlc_b, nlc_C).
-    pub fn vv10_coef(&self) -> (f64, f64) {
-        let mut nlc_b: f64 = 0.0;
-        #[allow(non_snake_case)]
-        let mut nlc_C: f64 = 0.0;
-        unsafe {
-            ffi::xc_nlc_coef(self.ptr, &mut nlc_b, &mut nlc_C);
+    ///
+    /// Only applicable for functionals with the `VV10` flag, and will return
+    /// `None` for other functionals.
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_wb97x", Unpolarized);
+    /// assert_eq!(xc_func.vv10_coef(), None);
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_wb97x_v", Unpolarized);
+    /// assert_eq!(xc_func.vv10_coef(), Some((6.0, 0.01)));
+    /// let xc_func = LibXCFunctional::from_identifier("mgga_c_scanl_rvv10", Unpolarized);
+    /// assert_eq!(xc_func.vv10_coef(), Some((15.7, 0.0093)));
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_vv10_coef()`
+    pub fn vv10_coef(&self) -> Option<(f64, f64)> {
+        if self.has_flag(LibXCFlags::VV10) {
+            let mut nlc_b: f64 = 0.0;
+            #[allow(non_snake_case)]
+            let mut nlc_C: f64 = 0.0;
+            unsafe {
+                ffi::xc_nlc_coef(self.ptr, &mut nlc_b, &mut nlc_C);
+            }
+            Some((nlc_b, nlc_C))
+        } else {
+            None
         }
-        (nlc_b, nlc_C)
-    }
-
-    // -- Auxiliary functionals ----------------------------------------------
-
-    /// Number of auxiliary functionals in a mixed functional.
-    pub fn num_aux_funcs(&self) -> i32 {
-        unsafe { ffi::xc_num_aux_funcs(self.ptr) as i32 }
-    }
-
-    /// IDs of the auxiliary functionals.
-    pub fn aux_func_ids(&self) -> Vec<i32> {
-        let n = self.num_aux_funcs();
-        let mut ids = vec![0 as c_int; n as usize];
-        unsafe { ffi::xc_aux_func_ids(self.ptr, ids.as_mut_ptr()) }
-        ids.into_iter().collect()
     }
 
     /// Weights of the auxiliary functionals.
-    pub fn aux_func_weights(&self) -> Vec<f64> {
-        let n = self.num_aux_funcs();
-        let mut weights = vec![0.0f64; n as usize];
-        unsafe { ffi::xc_aux_func_weights(self.ptr, weights.as_mut_ptr()) }
-        weights
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_b3lyp", Unpolarized);
+    /// println!("{:?}", xc_func.aux_funcs());
+    /// // Output: [("lda_x", 0.08), ("gga_x_b88", 0.72), ("lda_c_vwn_rpa", 0.19), ("gga_c_lyp", 0.81)]
+    /// // Output may have minor precision difference.
+    /// # let identifiers = xc_func.aux_funcs().iter().map(|(name, _)| name.clone()).collect::<Vec<String>>();
+    /// # assert_eq!(identifiers, vec![
+    /// #     "lda_x".to_string(),
+    /// #     "gga_x_b88".to_string(),
+    /// #     "lda_c_vwn_rpa".to_string(),
+    /// #     "gga_c_lyp".to_string(),
+    /// # ]);
+    /// # let weights: Vec<f64> = xc_func.aux_funcs().iter().map(|(_, weight)| *weight).collect();
+    /// # let expected_weights = vec![0.08, 0.72, 0.19, 0.81];
+    /// # for (w, ew) in weights.iter().zip(expected_weights.iter()) {
+    /// #     assert!((w - ew).abs() < 1e-6, "Expected weight {ew}, got {w}");
+    /// # }
+    /// ```
+    ///
+    /// Note some functionals does not have auxiliary functionals, and will
+    /// return an empty vector.
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_wb97x_v", Unpolarized);
+    /// assert!(xc_func.aux_funcs().is_empty());
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_aux_funcs(return_ids=False)`
+    pub fn aux_funcs(&self) -> Vec<(String, f64)> {
+        self.aux_funcs_by_id()
+            .into_iter()
+            .map(|(id, weight)| {
+                let name = unsafe { cstr_to_string(ffi::xc_functional_get_name(id)) };
+                (name, weight)
+            })
+            .collect()
     }
 
+    /// IDs of the auxiliary functionals.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let xc_func = LibXCFunctional::from_identifier("hyb_gga_xc_b3lyp", Unpolarized);
+    /// // Output: [(1, 0.08), (106, 0.72), (8, 0.19), (131, 0.81)]
+    /// # let ids = xc_func.aux_funcs_by_id().iter().map(|(id, _)| *id).collect::<Vec<i32>>();
+    /// # assert_eq!(ids, vec![1, 106, 8, 131]);
+    /// ```
+    ///
+    /// # PyLibxc counterpart
+    ///
+    /// `LibXCFunctional.get_aux_funcs(return_ids=True)`
+    pub fn aux_funcs_by_id(&self) -> Vec<(i32, f64)> {
+        let n = unsafe { ffi::xc_num_aux_funcs(self.ptr) as i32 };
+        let mut ids = vec![0 as c_int; n as usize];
+        let mut weights = vec![0.0f64; n as usize];
+        unsafe { ffi::xc_aux_func_ids(self.ptr, ids.as_mut_ptr()) }
+        unsafe { ffi::xc_aux_func_weights(self.ptr, weights.as_mut_ptr()) }
+        ids.into_iter().zip(weights.into_iter()).collect()
+    }
+}
+
+impl LibXCFunctional {
     // -- Output layout computation ------------------------------------------
 
     /// Compute the output layout for LDA at a given number of grid points.
