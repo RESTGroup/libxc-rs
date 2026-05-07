@@ -55,8 +55,8 @@ At current time (2026-may), the latest stable version is v7.0.0, and developer v
 The cargo feature will activate the corresponding version of header (`api-v6_2`, `api-v7_0`, `api-v7_1`), and the default version is v7.0.
 We will save libxc headers in folder `libxc-ffi/headers`.
 
-- `xc.h` header is the main header for libxc. This header needs separate implementation of static FFI (`ffi_xc_static.rs`) and dynamic FFI (folder `ffi_xc_dynamic`). Different versions of libxc tags will be applied (such as `api_v6_2`, `api_v7_0`)
+- `xc.h` header is the main header for libxc. This header needs separate implementation of static FFI (`ffi_static.rs`) and dynamic FFI (folder `ffi_dynamic`). Different versions of libxc tags will be applied (such as `api_v6_2`, `api_v7_0`)
 - `xc_funcs_<version>.h` contains the function declarations (const usize numbers) and minimal documentation for each functional. Different versions of libxc tags will be applied. This can contained at folder `xc_funcs`, defined as numbered enum (for future simplicity of parsing/serde).
 - `versioning_xc.md` contains the detailed changes of libxc API for each version. This file is structured and maintained by human developer. Use `## Introduced in v<version>` to check what functions are introduced in each version (and can used for script to parse).
 
-To generate the FFI bindings, use python scripts in `libxc-ffi/scripts`, with help of tree-sitter and bindgen. **The FFI bindgen must be generated automatically, without manual modification.** Exception is `ffi_xc_dynamic/mod.rs`, which can be manually modified.
+To generate the FFI bindings, use python scripts in `libxc-ffi/scripts`, with help of tree-sitter and bindgen. **The FFI bindgen must be generated automatically, without manual modification.** Exception is `ffi_dynamic/mod.rs`, which can be manually modified.

@@ -30,15 +30,15 @@
 
 // Static FFI bindings
 #[cfg(not(feature = "dynamic_loading"))]
-pub mod ffi_xc_static;
+pub mod ffi_static;
 #[cfg(not(feature = "dynamic_loading"))]
-pub use ffi_xc_static as ffi;
+pub use ffi_static as ffi;
 
 // Dynamic loading FFI bindings
 #[cfg(feature = "dynamic_loading")]
-pub mod ffi_xc_dynamic;
+pub mod ffi_dynamic;
 #[cfg(feature = "dynamic_loading")]
-pub use ffi_xc_dynamic as ffi;
+pub use ffi_dynamic as ffi;
 
 // Functional ID enums
 pub mod xc_funcs;

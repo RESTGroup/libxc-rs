@@ -1,8 +1,8 @@
 # # Generate FFI bindings for libxc (xc.h)
 
 # This script generates:
-# - ffi_xc_static.rs: static linking FFI bindings
-# - ffi_xc_dynamic/: dynamic loading module files
+# - ffi_static.rs: static linking FFI bindings
+# - ffi_dynamic/: dynamic loading module files
 
 import subprocess
 import os
@@ -236,7 +236,7 @@ def add_version_attributes(token, func_cfg_map):
 
 
 def generate_static_ffi(token, func_cfg_map):
-    """Generate ffi_xc_static.rs content from bindgen output."""
+    """Generate ffi_static.rs content from bindgen output."""
     token = token.replace("::core::ffi::", "")
     token = remove_xc_version_constants(token)
     token = add_struct_version_attributes(token, version_struct_changes)
@@ -471,7 +471,7 @@ use core::ffi::{{c_char, c_int}};
 def main():
     # Ensure output directories exist
     os.makedirs(path_temp, exist_ok=True)
-    os.makedirs(f"{path_out}/ffi_xc_dynamic", exist_ok=True)
+    os.makedirs(f"{path_out}/ffi_dynamic", exist_ok=True)
 
     # Copy headers to temp, fixing the include for bindgen
     shutil.rmtree(path_temp, ignore_errors=True)
@@ -505,24 +505,24 @@ def main():
     version_map = parse_versioning_md(versioning_path)
     func_cfg_map = build_func_version_map(version_map)
 
-    # Generate static FFI (ffi_xc_static.rs)
+    # Generate static FFI (ffi_static.rs)
     static_ffi = generate_static_ffi(bindgen_output, func_cfg_map)
-    with open(f"{path_out}/ffi_xc_static.rs", "w") as f:
+    with open(f"{path_out}/ffi_static.rs", "w") as f:
         f.write(static_ffi)
 
-    # Generate dynamic loading files (ffi_xc_dynamic/)
+    # Generate dynamic loading files (ffi_dynamic/)
     dyload_files = dyload_main(bindgen_output)
 
-    with open(f"{path_out}/ffi_xc_dynamic/ffi_base.rs", "w") as f:
+    with open(f"{path_out}/ffi_dynamic/ffi_base.rs", "w") as f:
         f.write(dyload_files["ffi_base"])
 
-    with open(f"{path_out}/ffi_xc_dynamic/dyload_struct.rs", "w") as f:
+    with open(f"{path_out}/ffi_dynamic/dyload_struct.rs", "w") as f:
         f.write(dyload_files["dyload_struct"])
 
-    with open(f"{path_out}/ffi_xc_dynamic/dyload_initializer.rs", "w") as f:
+    with open(f"{path_out}/ffi_dynamic/dyload_initializer.rs", "w") as f:
         f.write(dyload_files["dyload_initializer"])
 
-    with open(f"{path_out}/ffi_xc_dynamic/dyload_compatible.rs", "w") as f:
+    with open(f"{path_out}/ffi_dynamic/dyload_compatible.rs", "w") as f:
         f.write(dyload_files["dyload_compatible"])
 
     # Run cargo fmt
@@ -530,8 +530,8 @@ def main():
     subprocess.run(["cargo", "fmt"])
 
     print(f"Generated:")
-    print(f"  - {path_out}/ffi_xc_static.rs")
-    print(f"  - {path_out}/ffi_xc_dynamic/")
+    print(f"  - {path_out}/ffi_static.rs")
+    print(f"  - {path_out}/ffi_dynamic/")
 
 
 if __name__ == "__main__":
