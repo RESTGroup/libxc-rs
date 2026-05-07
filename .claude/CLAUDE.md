@@ -4,7 +4,7 @@
 
 You should also create a file `CLAUDE.local.md` to place local resources:
 - `LIBXC_REPO_PATH`: local path of original libxc (c/cuda/fortran) repository. The source code can help you understand how libxc works.
-- `DFTD4_DYLOAD`: the path of dftd4 dynamic library. During development, we usually use dynamic-loading. You need also to specify the version of the specified dftd4 dynamic library, and whether gpu is supported.
+- `LIBXC_DYLOAD`: the path of libxc dynamic library. During development, we usually use dynamic-loading. You need also to specify the version of the specified libxc dynamic library, and whether gpu is supported.
 
 If human developers forgets to define `CLAUDE.local.md`, you should ask them to do so before you can start working on the FFI wrapper.
 
@@ -25,7 +25,7 @@ Important files for FFI and wrapper development:
 ## Build and test
 
 We only test crate `libxc` during development.
-Usually we use dynamic loading, and you need to set `DFTD4_DYLOAD` in environment variable. We may implement finding dftd4 dynamic library in the future, but environment variable `DFTD4_DYLOAD` can make sure we are using the exact version of dftd4 we want to test.
+Usually we use dynamic loading, and you need to set `LIBXC_DYLOAD` in environment variable. We may implement finding libxc dynamic library in the future, but environment variable `LIBXC_DYLOAD` can make sure we are using the exact version of libxc we want to test.
 
 ## General conventions
 
