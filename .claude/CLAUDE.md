@@ -4,7 +4,7 @@
 
 You should also create a file `CLAUDE.local.md` to place local resources:
 - `LIBXC_REPO_PATH`: local path of original libxc (c/cuda/fortran) repository. The source code can help you understand how libxc works.
-- `LIBXC_DYLOAD`: the path of libxc dynamic library. During development, we usually use dynamic-loading. You need also to specify the version of the specified libxc dynamic library, and whether gpu is supported.
+- `LIBXC_DYLOAD` (optional): the path of libxc dynamic library. During development, we usually use dynamic-loading. You need also to specify the version of the specified libxc dynamic library, and whether gpu is supported.
 
 If human developers forgets to define `CLAUDE.local.md`, you should ask them to do so before you can start working on the FFI wrapper.
 

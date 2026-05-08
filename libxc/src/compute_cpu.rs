@@ -135,8 +135,9 @@ impl LibXCFunctional {
     pub fn compute_lda(
         &self,
         input: &LibXCLdaInput,
-        flags: &LibXCDerivativeFlags,
+        flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let flags = flags.into();
         self.validate_flags(flags)?;
         let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
@@ -241,8 +242,9 @@ impl LibXCFunctional {
     pub fn compute_gga(
         &self,
         input: &LibXCGgaInput,
-        flags: &LibXCDerivativeFlags,
+        flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let flags = flags.into();
         self.validate_flags(flags)?;
         let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {
@@ -394,8 +396,9 @@ impl LibXCFunctional {
     pub fn compute_mgga(
         &self,
         input: &LibXCMggaInput,
-        flags: &LibXCDerivativeFlags,
+        flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let flags = flags.into();
         self.validate_flags(flags)?;
         let nspin = self.spin() as usize;
         if input.rho.len() % nspin != 0 {

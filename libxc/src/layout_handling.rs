@@ -1,7 +1,10 @@
 use crate::prelude::*;
 
 /// Flags controlling which derivative levels to compute.
-#[derive(Debug, Clone)]
+///
+/// This struct is somehow cumbersome; but you can also use `usize` levels
+/// (0..=4) which are converted to the corresponding flags via `From<usize>`.
+#[derive(Debug, Clone, Copy)]
 pub struct LibXCDerivativeFlags {
     pub do_exc: bool,
     pub do_vxc: bool,
@@ -13,6 +16,183 @@ pub struct LibXCDerivativeFlags {
 impl Default for LibXCDerivativeFlags {
     fn default() -> Self {
         Self { do_exc: true, do_vxc: true, do_fxc: false, do_kxc: false, do_lxc: false }
+    }
+}
+
+impl From<usize> for LibXCDerivativeFlags {
+    /// Converts a derivative level (0..=4) to the corresponding flags.
+    ///
+    /// - Level 0: EXC
+    /// - Level 1: EXC + VXC
+    /// - level 2: EXC + VXC + FXC
+    /// - level 3: EXC + VXC + FXC + KXC
+    /// - level 4: EXC + VXC + FXC + KXC + LXC
+    fn from(level: usize) -> Self {
+        match level {
+            0 => Self { do_exc: true, do_vxc: false, do_fxc: false, do_kxc: false, do_lxc: false },
+            1 => Self { do_exc: true, do_vxc: true, do_fxc: false, do_kxc: false, do_lxc: false },
+            2 => Self { do_exc: true, do_vxc: true, do_fxc: true, do_kxc: false, do_lxc: false },
+            3 => Self { do_exc: true, do_vxc: true, do_fxc: true, do_kxc: true, do_lxc: false },
+            4 => Self { do_exc: true, do_vxc: true, do_fxc: true, do_kxc: true, do_lxc: true },
+            _ => panic!("invalid derivative level {level}"),
+        }
+    }
+}
+
+// -- Output label definitions (mirroring pylibxc output_labels) --------
+
+#[rustfmt::skip]
+const LDA_OUTPUT_LABELS: [&'static str; 5] = [
+    "zk",                                                               // 1
+    "vrho",                                                             // 1
+    "v2rho2",                                                           // 1
+    "v3rho3",                                                           // 1
+    "v4rho4",                                                           // 1
+];
+const LDA_EXC_END: usize = 1;
+const LDA_VXC_END: usize = 2;
+const LDA_FXC_END: usize = 3;
+const LDA_KXC_END: usize = 4;
+const LDA_LXC_END: usize = 5;
+
+#[rustfmt::skip]
+const GGA_OUTPUT_LABELS: [&'static str; 15] = [
+    "zk",                                                               // 1
+    "vrho", "vsigma",                                                   // 2
+    "v2rho2", "v2rhosigma", "v2sigma2",                                 // 3
+    "v3rho3", "v3rho2sigma", "v3rhosigma2", "v3sigma3",                 // 4
+    "v4rho4", "v4rho3sigma", "v4rho2sigma2", "v4rhosigma3", "v4sigma4", // 5
+];
+const GGA_EXC_END: usize = 1;
+const GGA_VXC_END: usize = 3;
+const GGA_FXC_END: usize = 6;
+const GGA_KXC_END: usize = 10;
+const GGA_LXC_END: usize = 15;
+
+#[rustfmt::skip]
+const MGGA_OUTPUT_LABELS: [&'static str; 70] = [
+    "zk",                                                               // 1
+    "vrho", "vsigma", "vlapl", "vtau",                                  // 4
+    "v2rho2", "v2rhosigma", "v2rholapl", "v2rhotau", "v2sigma2",        // 10
+    "v2sigmalapl", "v2sigmatau", "v2lapl2", "v2lapltau", "v2tau2",
+    "v3rho3", "v3rho2sigma", "v3rho2lapl", "v3rho2tau", "v3rhosigma2",  // 20
+    "v3rhosigmalapl", "v3rhosigmatau", "v3rholapl2", "v3rholapltau",
+    "v3rhotau2", "v3sigma3", "v3sigma2lapl", "v3sigma2tau",
+    "v3sigmalapl2", "v3sigmalapltau", "v3sigmatau2", "v3lapl3",
+    "v3lapl2tau", "v3lapltau2", "v3tau3",
+    "v4rho4", "v4rho3sigma", "v4rho3lapl", "v4rho3tau", "v4rho2sigma2",  // 35
+    "v4rho2sigmalapl", "v4rho2sigmatau", "v4rho2lapl2", "v4rho2lapltau",
+    "v4rho2tau2", "v4rhosigma3", "v4rhosigma2lapl", "v4rhosigma2tau",
+    "v4rhosigmalapl2", "v4rhosigmalapltau", "v4rhosigmatau2",
+    "v4rholapl3", "v4rholapl2tau", "v4rholapltau2", "v4rhotau3",
+    "v4sigma4", "v4sigma3lapl", "v4sigma3tau", "v4sigma2lapl2",
+    "v4sigma2lapltau", "v4sigma2tau2", "v4sigmalapl3", "v4sigmalapl2tau",
+    "v4sigmalapltau2", "v4sigmatau3", "v4lapl4", "v4lapl3tau",
+    "v4lapl2tau2", "v4lapltau3", "v4tau4",
+];
+const MGGA_EXC_END: usize = 1;
+const MGGA_VXC_END: usize = 5;
+const MGGA_FXC_END: usize = 15;
+const MGGA_KXC_END: usize = 35;
+const MGGA_LXC_END: usize = 70;
+
+/// Maps an output label name to its dimension value from `xc_dimensions`.
+pub(crate) fn get_dim(dim: &ffi::xc_dimensions, label: &str) -> i32 {
+    match label {
+        "zk" => dim.zk,
+        "vrho" => dim.vrho,
+        "vsigma" => dim.vsigma,
+        "vlapl" => dim.vlapl,
+        "vtau" => dim.vtau,
+        "v2rho2" => dim.v2rho2,
+        "v2rhosigma" => dim.v2rhosigma,
+        "v2rholapl" => dim.v2rholapl,
+        "v2rhotau" => dim.v2rhotau,
+        "v2sigma2" => dim.v2sigma2,
+        "v2sigmalapl" => dim.v2sigmalapl,
+        "v2sigmatau" => dim.v2sigmatau,
+        "v2lapl2" => dim.v2lapl2,
+        "v2lapltau" => dim.v2lapltau,
+        "v2tau2" => dim.v2tau2,
+        "v3rho3" => dim.v3rho3,
+        "v3rho2sigma" => dim.v3rho2sigma,
+        "v3rho2lapl" => dim.v3rho2lapl,
+        "v3rho2tau" => dim.v3rho2tau,
+        "v3rhosigma2" => dim.v3rhosigma2,
+        "v3rhosigmalapl" => dim.v3rhosigmalapl,
+        "v3rhosigmatau" => dim.v3rhosigmatau,
+        "v3rholapl2" => dim.v3rholapl2,
+        "v3rholapltau" => dim.v3rholapltau,
+        "v3rhotau2" => dim.v3rhotau2,
+        "v3sigma3" => dim.v3sigma3,
+        "v3sigma2lapl" => dim.v3sigma2lapl,
+        "v3sigma2tau" => dim.v3sigma2tau,
+        "v3sigmalapl2" => dim.v3sigmalapl2,
+        "v3sigmalapltau" => dim.v3sigmalapltau,
+        "v3sigmatau2" => dim.v3sigmatau2,
+        "v3lapl3" => dim.v3lapl3,
+        "v3lapl2tau" => dim.v3lapl2tau,
+        "v3lapltau2" => dim.v3lapltau2,
+        "v3tau3" => dim.v3tau3,
+        "v4rho4" => dim.v4rho4,
+        "v4rho3sigma" => dim.v4rho3sigma,
+        "v4rho3lapl" => dim.v4rho3lapl,
+        "v4rho3tau" => dim.v4rho3tau,
+        "v4rho2sigma2" => dim.v4rho2sigma2,
+        "v4rho2sigmalapl" => dim.v4rho2sigmalapl,
+        "v4rho2sigmatau" => dim.v4rho2sigmatau,
+        "v4rho2lapl2" => dim.v4rho2lapl2,
+        "v4rho2lapltau" => dim.v4rho2lapltau,
+        "v4rho2tau2" => dim.v4rho2tau2,
+        "v4rhosigma3" => dim.v4rhosigma3,
+        "v4rhosigma2lapl" => dim.v4rhosigma2lapl,
+        "v4rhosigma2tau" => dim.v4rhosigma2tau,
+        "v4rhosigmalapl2" => dim.v4rhosigmalapl2,
+        "v4rhosigmalapltau" => dim.v4rhosigmalapltau,
+        "v4rhosigmatau2" => dim.v4rhosigmatau2,
+        "v4rholapl3" => dim.v4rholapl3,
+        "v4rholapl2tau" => dim.v4rholapl2tau,
+        "v4rholapltau2" => dim.v4rholapltau2,
+        "v4rhotau3" => dim.v4rhotau3,
+        "v4sigma4" => dim.v4sigma4,
+        "v4sigma3lapl" => dim.v4sigma3lapl,
+        "v4sigma3tau" => dim.v4sigma3tau,
+        "v4sigma2lapl2" => dim.v4sigma2lapl2,
+        "v4sigma2lapltau" => dim.v4sigma2lapltau,
+        "v4sigma2tau2" => dim.v4sigma2tau2,
+        "v4sigmalapl3" => dim.v4sigmalapl3,
+        "v4sigmalapl2tau" => dim.v4sigmalapl2tau,
+        "v4sigmalapltau2" => dim.v4sigmalapltau2,
+        "v4sigmatau3" => dim.v4sigmatau3,
+        "v4lapl4" => dim.v4lapl4,
+        "v4lapl3tau" => dim.v4lapl3tau,
+        "v4lapl2tau2" => dim.v4lapl2tau2,
+        "v4lapltau3" => dim.v4lapltau3,
+        "v4tau4" => dim.v4tau4,
+        _ => 0,
+    }
+}
+
+/// Mirrors pylibxc's `_check_arrays`: iterates output labels in
+/// `labels[start..end]`, pushing those whose derivative level is
+/// required and whose lapl/tau needs are satisfied.
+pub(crate) fn check_arrays(
+    layout: &mut LibXCOutputLayout,
+    labels: &[&'static str],
+    start: usize,
+    end: usize,
+    dim: &ffi::xc_dimensions,
+    required: bool,
+    needs_lapl: bool,
+    needs_tau: bool,
+) {
+    for &label in &labels[start..end] {
+        let label_required = required
+            && !(!needs_lapl && label.contains("lapl"))
+            && !(!needs_tau && label.contains("tau"));
+        if label_required {
+            layout.push(label, get_dim(dim, label));
+        }
     }
 }
 
@@ -106,302 +286,95 @@ impl LibXCFunctional {
     // -- Output layout computation ------------------------------------------
 
     /// Compute the output layout for LDA at a given number of grid points.
+    #[rustfmt::skip]
     pub fn lda_output_layout(
         &self,
         npoints: usize,
-        flags: &LibXCDerivativeFlags,
+        flags: LibXCDerivativeFlags,
     ) -> LibXCOutputLayout {
         let dim = self.dim();
         let mut layout = LibXCOutputLayout::new(npoints);
-        if flags.do_exc {
-            layout.push("zk", dim.zk);
-        }
-        if flags.do_vxc {
-            layout.push("vrho", dim.vrho);
-        }
-        if flags.do_fxc {
-            layout.push("v2rho2", dim.v2rho2);
-        }
-        if flags.do_kxc {
-            layout.push("v3rho3", dim.v3rho3);
-        }
-        if flags.do_lxc {
-            layout.push("v4rho4", dim.v4rho4);
-        }
+        check_arrays(&mut layout, &LDA_OUTPUT_LABELS, 0, LDA_EXC_END, dim, flags.do_exc, false, false);
+        check_arrays(&mut layout, &LDA_OUTPUT_LABELS, LDA_EXC_END, LDA_VXC_END, dim, flags.do_vxc, false, false);
+        check_arrays(&mut layout, &LDA_OUTPUT_LABELS, LDA_VXC_END, LDA_FXC_END, dim, flags.do_fxc, false, false);
+        check_arrays(&mut layout, &LDA_OUTPUT_LABELS, LDA_FXC_END, LDA_KXC_END, dim, flags.do_kxc, false, false);
+        check_arrays(&mut layout, &LDA_OUTPUT_LABELS, LDA_KXC_END, LDA_LXC_END, dim, flags.do_lxc, false, false);
         layout
     }
 
     /// Compute the output layout for GGA at a given number of grid points.
+    #[rustfmt::skip]
     pub fn gga_output_layout(
         &self,
         npoints: usize,
-        flags: &LibXCDerivativeFlags,
+        flags: LibXCDerivativeFlags,
     ) -> LibXCOutputLayout {
         let dim = self.dim();
         let mut layout = LibXCOutputLayout::new(npoints);
-        if flags.do_exc {
-            layout.push("zk", dim.zk);
-        }
-        if flags.do_vxc {
-            layout.push("vrho", dim.vrho);
-            layout.push("vsigma", dim.vsigma);
-        }
-        if flags.do_fxc {
-            layout.push("v2rho2", dim.v2rho2);
-            layout.push("v2rhosigma", dim.v2rhosigma);
-            layout.push("v2sigma2", dim.v2sigma2);
-        }
-        if flags.do_kxc {
-            layout.push("v3rho3", dim.v3rho3);
-            layout.push("v3rho2sigma", dim.v3rho2sigma);
-            layout.push("v3rhosigma2", dim.v3rhosigma2);
-            layout.push("v3sigma3", dim.v3sigma3);
-        }
-        if flags.do_lxc {
-            layout.push("v4rho4", dim.v4rho4);
-            layout.push("v4rho3sigma", dim.v4rho3sigma);
-            layout.push("v4rho2sigma2", dim.v4rho2sigma2);
-            layout.push("v4rhosigma3", dim.v4rhosigma3);
-            layout.push("v4sigma4", dim.v4sigma4);
-        }
+        check_arrays(&mut layout, &GGA_OUTPUT_LABELS, 0, GGA_EXC_END, dim, flags.do_exc, false, false);
+        check_arrays(&mut layout, &GGA_OUTPUT_LABELS, GGA_EXC_END, GGA_VXC_END, dim, flags.do_vxc, false, false);
+        check_arrays(&mut layout, &GGA_OUTPUT_LABELS, GGA_VXC_END, GGA_FXC_END, dim, flags.do_fxc, false, false);
+        check_arrays(&mut layout, &GGA_OUTPUT_LABELS, GGA_FXC_END, GGA_KXC_END, dim, flags.do_kxc, false, false);
+        check_arrays(&mut layout, &GGA_OUTPUT_LABELS, GGA_KXC_END, GGA_LXC_END, dim, flags.do_lxc, false, false);
         layout
     }
 
     /// Compute the output layout for MGGA at a given number of grid points.
+    #[rustfmt::skip]
     pub fn mgga_output_layout(
         &self,
         npoints: usize,
-        flags: &LibXCDerivativeFlags,
+        flags: LibXCDerivativeFlags,
     ) -> LibXCOutputLayout {
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
         let mut layout = LibXCOutputLayout::new(npoints);
-        if flags.do_exc {
-            layout.push("zk", dim.zk);
-        }
-        if flags.do_vxc {
-            layout.push("vrho", dim.vrho);
-            layout.push("vsigma", dim.vsigma);
-            if needs_lapl {
-                layout.push("vlapl", dim.vlapl);
-            }
-            if needs_tau {
-                layout.push("vtau", dim.vtau);
-            }
-        }
-        if flags.do_fxc {
-            layout.push("v2rho2", dim.v2rho2);
-            layout.push("v2rhosigma", dim.v2rhosigma);
-            if needs_lapl {
-                layout.push("v2rholapl", dim.v2rholapl);
-            }
-            if needs_tau {
-                layout.push("v2rhotau", dim.v2rhotau);
-            }
-            layout.push("v2sigma2", dim.v2sigma2);
-            if needs_lapl {
-                layout.push("v2sigmalapl", dim.v2sigmalapl);
-            }
-            if needs_tau {
-                layout.push("v2sigmatau", dim.v2sigmatau);
-            }
-            if needs_lapl {
-                layout.push("v2lapl2", dim.v2lapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v2lapltau", dim.v2lapltau);
-            }
-            if needs_tau {
-                layout.push("v2tau2", dim.v2tau2);
-            }
-        }
-        if flags.do_kxc {
-            layout.push("v3rho3", dim.v3rho3);
-            layout.push("v3rho2sigma", dim.v3rho2sigma);
-            if needs_lapl {
-                layout.push("v3rho2lapl", dim.v3rho2lapl);
-            }
-            if needs_tau {
-                layout.push("v3rho2tau", dim.v3rho2tau);
-            }
-            layout.push("v3rhosigma2", dim.v3rhosigma2);
-            if needs_lapl {
-                layout.push("v3rhosigmalapl", dim.v3rhosigmalapl);
-            }
-            if needs_tau {
-                layout.push("v3rhosigmatau", dim.v3rhosigmatau);
-            }
-            if needs_lapl {
-                layout.push("v3rholapl2", dim.v3rholapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v3rholapltau", dim.v3rholapltau);
-            }
-            if needs_tau {
-                layout.push("v3rhotau2", dim.v3rhotau2);
-            }
-            layout.push("v3sigma3", dim.v3sigma3);
-            if needs_lapl {
-                layout.push("v3sigma2lapl", dim.v3sigma2lapl);
-            }
-            if needs_tau {
-                layout.push("v3sigma2tau", dim.v3sigma2tau);
-            }
-            if needs_lapl {
-                layout.push("v3sigmalapl2", dim.v3sigmalapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v3sigmalapltau", dim.v3sigmalapltau);
-            }
-            if needs_tau {
-                layout.push("v3sigmatau2", dim.v3sigmatau2);
-            }
-            if needs_lapl {
-                layout.push("v3lapl3", dim.v3lapl3);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v3lapl2tau", dim.v3lapl2tau);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v3lapltau2", dim.v3lapltau2);
-            }
-            if needs_tau {
-                layout.push("v3tau3", dim.v3tau3);
-            }
-        }
-        if flags.do_lxc {
-            layout.push("v4rho4", dim.v4rho4);
-            layout.push("v4rho3sigma", dim.v4rho3sigma);
-            if needs_lapl {
-                layout.push("v4rho3lapl", dim.v4rho3lapl);
-            }
-            if needs_tau {
-                layout.push("v4rho3tau", dim.v4rho3tau);
-            }
-            layout.push("v4rho2sigma2", dim.v4rho2sigma2);
-            if needs_lapl {
-                layout.push("v4rho2sigmalapl", dim.v4rho2sigmalapl);
-            }
-            if needs_tau {
-                layout.push("v4rho2sigmatau", dim.v4rho2sigmatau);
-            }
-            if needs_lapl {
-                layout.push("v4rho2lapl2", dim.v4rho2lapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4rho2lapltau", dim.v4rho2lapltau);
-            }
-            if needs_tau {
-                layout.push("v4rho2tau2", dim.v4rho2tau2);
-            }
-            layout.push("v4rhosigma3", dim.v4rhosigma3);
-            if needs_lapl {
-                layout.push("v4rhosigma2lapl", dim.v4rhosigma2lapl);
-            }
-            if needs_tau {
-                layout.push("v4rhosigma2tau", dim.v4rhosigma2tau);
-            }
-            if needs_lapl {
-                layout.push("v4rhosigmalapl2", dim.v4rhosigmalapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4rhosigmalapltau", dim.v4rhosigmalapltau);
-            }
-            if needs_tau {
-                layout.push("v4rhosigmatau2", dim.v4rhosigmatau2);
-            }
-            if needs_lapl {
-                layout.push("v4rholapl3", dim.v4rholapl3);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4rholapl2tau", dim.v4rholapl2tau);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4rholapltau2", dim.v4rholapltau2);
-            }
-            if needs_tau {
-                layout.push("v4rhotau3", dim.v4rhotau3);
-            }
-            layout.push("v4sigma4", dim.v4sigma4);
-            if needs_lapl {
-                layout.push("v4sigma3lapl", dim.v4sigma3lapl);
-            }
-            if needs_tau {
-                layout.push("v4sigma3tau", dim.v4sigma3tau);
-            }
-            if needs_lapl {
-                layout.push("v4sigma2lapl2", dim.v4sigma2lapl2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4sigma2lapltau", dim.v4sigma2lapltau);
-            }
-            if needs_tau {
-                layout.push("v4sigma2tau2", dim.v4sigma2tau2);
-            }
-            if needs_lapl {
-                layout.push("v4sigmalapl3", dim.v4sigmalapl3);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4sigmalapl2tau", dim.v4sigmalapl2tau);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4sigmalapltau2", dim.v4sigmalapltau2);
-            }
-            if needs_tau {
-                layout.push("v4sigmatau3", dim.v4sigmatau3);
-            }
-            if needs_lapl {
-                layout.push("v4lapl4", dim.v4lapl4);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4lapl3tau", dim.v4lapl3tau);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4lapl2tau2", dim.v4lapl2tau2);
-            }
-            if needs_lapl && needs_tau {
-                layout.push("v4lapltau3", dim.v4lapltau3);
-            }
-            if needs_tau {
-                layout.push("v4tau4", dim.v4tau4);
-            }
-        }
+        check_arrays(&mut layout, &MGGA_OUTPUT_LABELS, 0, MGGA_EXC_END, dim, flags.do_exc, needs_lapl, needs_tau);
+        check_arrays(&mut layout, &MGGA_OUTPUT_LABELS, MGGA_EXC_END, MGGA_VXC_END, dim, flags.do_vxc, needs_lapl, needs_tau);
+        check_arrays(&mut layout, &MGGA_OUTPUT_LABELS, MGGA_VXC_END, MGGA_FXC_END, dim, flags.do_fxc, needs_lapl, needs_tau);
+        check_arrays(&mut layout, &MGGA_OUTPUT_LABELS, MGGA_FXC_END, MGGA_KXC_END, dim, flags.do_kxc, needs_lapl, needs_tau);
+        check_arrays(&mut layout, &MGGA_OUTPUT_LABELS, MGGA_KXC_END, MGGA_LXC_END, dim, flags.do_lxc, needs_lapl, needs_tau);
         layout
+    }
+
+    /// Compute the output layout for this functional at a given number of grid
+    /// points.
+    pub fn output_layout(
+        &self,
+        npoints: usize,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> LibXCOutputLayout {
+        use crate::prelude::libxc_enum_items::*;
+        let flags = flags.into();
+        match self.family() {
+            LDA | HybLDA => self.lda_output_layout(npoints, flags),
+            GGA | HybGGA => self.gga_output_layout(npoints, flags),
+            MGGA | HybMGGA => self.mgga_output_layout(npoints, flags),
+            OEP | LCA => unimplemented!("output layout for OEP/LCA is not recognized."),
+        }
     }
 
     // -- Validate derivative flags ------------------------------------------
 
-    pub(crate) fn validate_flags(&self, flags: &LibXCDerivativeFlags) -> Result<(), LibXCError> {
-        if flags.do_exc && !self.has_exc() {
-            return Err(LibXCError::ComputeError(format!(
-                "functional '{}' does not have EXC capabilities",
-                self.identifier()
-            )));
-        }
-        if flags.do_vxc && !self.has_vxc() {
-            return Err(LibXCError::ComputeError(format!(
-                "functional '{}' does not have VXC capabilities",
-                self.identifier()
-            )));
-        }
-        if flags.do_fxc && !self.has_fxc() {
-            return Err(LibXCError::ComputeError(format!(
-                "functional '{}' does not have FXC capabilities",
-                self.identifier()
-            )));
-        }
-        if flags.do_kxc && !self.has_kxc() {
-            return Err(LibXCError::ComputeError(format!(
-                "functional '{}' does not have KXC capabilities",
-                self.identifier()
-            )));
-        }
-        if flags.do_lxc && !self.has_lxc() {
-            return Err(LibXCError::ComputeError(format!(
-                "functional '{}' does not have LXC capabilities",
-                self.identifier()
-            )));
+    pub(crate) fn validate_flags(
+        &self,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(), LibXCError> {
+        let flags = flags.into();
+        for (flag, has_cap, name) in [
+            (flags.do_exc, self.has_exc(), "EXC"),
+            (flags.do_vxc, self.has_vxc(), "VXC"),
+            (flags.do_fxc, self.has_fxc(), "FXC"),
+            (flags.do_kxc, self.has_kxc(), "KXC"),
+            (flags.do_lxc, self.has_lxc(), "LXC"),
+        ] {
+            if flag && !has_cap {
+                return Err(LibXCError::ComputeError(format!(
+                    "functional '{}' does not have {name} capabilities",
+                    self.identifier(),
+                )));
+            }
         }
         Ok(())
     }
