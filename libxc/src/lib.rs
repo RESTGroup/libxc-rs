@@ -4,11 +4,13 @@ pub mod functional;
 pub mod util;
 
 pub mod compute_cpu;
+pub mod layout_handling;
 
 pub mod prelude {
     pub use crate::enums::*;
     pub use crate::error::*;
     pub use crate::functional::*;
+    pub use crate::layout_handling::*;
 
     pub(crate) use core::borrow::Borrow;
     pub(crate) use core::ffi::{c_char, c_int, CStr};
