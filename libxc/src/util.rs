@@ -45,11 +45,7 @@ pub fn libxc_reference_key() -> String {
 pub fn libxc_functional_get_number(name: &str) -> Option<i32> {
     let c_name = std::ffi::CString::new(name).ok()?;
     let n = unsafe { ffi::xc_functional_get_number(c_name.as_ptr()) };
-    if n == -1 {
-        None
-    } else {
-        Some(n as i32)
-    }
+    (n != -1).then_some(n as i32)
 }
 
 /// Returns the functional name for a given number, or `None` if not found.
@@ -63,11 +59,7 @@ pub fn libxc_functional_get_name(number: i32) -> Option<String> {
     unsafe {
         libc::free(ptr as *mut std::ffi::c_void);
     }
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    (!s.is_empty()).then_some(s)
 }
 
 /// Returns the total number of available functionals.
@@ -78,22 +70,36 @@ pub fn libxc_number_of_functionals() -> i32 {
 /// Returns a sorted list of all available functional numbers.
 pub fn libxc_available_functional_numbers() -> Vec<i32> {
     let n = libxc_number_of_functionals();
-    let mut list = vec![0 as std::ffi::c_int; n as usize];
+    let mut list: Vec<std::ffi::c_int> = vec![0; n as usize];
     unsafe {
         ffi::xc_available_functional_numbers(list.as_mut_ptr());
     }
     list.into_iter().collect()
 }
 
-/// Returns a list of all available functional names.
+/// Returns a list of all available functional names, sorted alphabetically.
+///
+/// Uses `xc_available_functional_numbers_by_name` + `xc_functional_get_name`
+/// instead of `xc_available_functional_names`, because the C function expects
+/// pre-allocated char buffers (it does `strcpy`) which is awkward to manage
+/// from Rust. The pylibxc Python wrapper uses the same approach.
 pub fn libxc_available_functional_names() -> Vec<String> {
     let n = libxc_number_of_functionals();
-    // Build a contiguous buffer for the name pointers
-    let mut name_ptrs = vec![std::ptr::null_mut::<std::ffi::c_char>(); n as usize];
+    let mut ids: Vec<std::ffi::c_int> = vec![0; n as usize];
     unsafe {
-        ffi::xc_available_functional_names(name_ptrs.as_mut_ptr());
+        ffi::xc_available_functional_numbers_by_name(ids.as_mut_ptr());
     }
-    name_ptrs.into_iter().map(|ptr| unsafe { cstr_to_string(ptr) }).collect()
+    ids.into_iter()
+        .filter_map(|id| {
+            let ptr = unsafe { ffi::xc_functional_get_name(id) };
+            if ptr.is_null() {
+                return None;
+            }
+            let s = unsafe { cstr_to_string(ptr) };
+            unsafe { libc::free(ptr as *mut std::ffi::c_void) };
+            (!s.is_empty()).then_some(s)
+        })
+        .collect()
 }
 
 /// Print the library path of dynamic loading / static linking.
