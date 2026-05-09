@@ -23,110 +23,102 @@ fn require_input<'a>(
         .ok_or_else(|| LibXCError::ComputeError(format!("{key}: required input not provided")))
 }
 
-// ---------------------------------------------------------------------------
-// Preallocated output types (Variant 2)
-// ---------------------------------------------------------------------------
-
-/// Preallocated output buffers for LDA computation.
-pub struct LibXCLdaOutputMut<'a> {
-    pub zk: Option<&'a mut [f64]>,
-    pub vrho: Option<&'a mut [f64]>,
-    pub v2rho2: Option<&'a mut [f64]>,
-    pub v3rho3: Option<&'a mut [f64]>,
-    pub v4rho4: Option<&'a mut [f64]>,
+/// Validate a required input's size and return a const pointer.
+fn require_input_ptr(
+    input: &LibXCCpuInput,
+    key: &'static str,
+    npoints: usize,
+    expected_dim: i32,
+) -> Result<*const f64, LibXCError> {
+    let slice = require_input(input, key)?;
+    let expected = npoints * (expected_dim as usize);
+    if slice.len() != expected {
+        return Err(LibXCError::ComputeError(format!(
+            "{key}: expected size {expected}, got {}",
+            slice.len()
+        )));
+    }
+    Ok(slice.as_ptr())
 }
 
-/// Preallocated output buffers for GGA computation.
-pub struct LibXCGgaOutputMut<'a> {
-    pub zk: Option<&'a mut [f64]>,
-    pub vrho: Option<&'a mut [f64]>,
-    pub vsigma: Option<&'a mut [f64]>,
-    pub v2rho2: Option<&'a mut [f64]>,
-    pub v2rhosigma: Option<&'a mut [f64]>,
-    pub v2sigma2: Option<&'a mut [f64]>,
-    pub v3rho3: Option<&'a mut [f64]>,
-    pub v3rho2sigma: Option<&'a mut [f64]>,
-    pub v3rhosigma2: Option<&'a mut [f64]>,
-    pub v3sigma3: Option<&'a mut [f64]>,
-    pub v4rho4: Option<&'a mut [f64]>,
-    pub v4rho3sigma: Option<&'a mut [f64]>,
-    pub v4rho2sigma2: Option<&'a mut [f64]>,
-    pub v4rhosigma3: Option<&'a mut [f64]>,
-    pub v4sigma4: Option<&'a mut [f64]>,
+/// Validate a conditionally-required input and return a const pointer.
+/// Returns null if `required` is false; errors if required but absent.
+fn conditional_input_ptr(
+    input: &LibXCCpuInput,
+    key: &'static str,
+    npoints: usize,
+    expected_dim: i32,
+    required: bool,
+) -> Result<*const f64, LibXCError> {
+    match (input.get(key).copied(), required) {
+        (Some(slice), true) => {
+            let expected = npoints * (expected_dim as usize);
+            if slice.len() != expected {
+                return Err(LibXCError::ComputeError(format!(
+                    "{key}: expected size {expected}, got {}",
+                    slice.len()
+                )));
+            }
+            Ok(slice.as_ptr())
+        },
+        (None, true) => Err(LibXCError::ComputeError(format!(
+            "{key}: required input not provided"
+        ))),
+        (_, false) => Ok(std::ptr::null()),
+    }
 }
 
-/// Preallocated output buffers for MGGA computation.
-pub struct LibXCMggaOutputMut<'a> {
-    pub zk: Option<&'a mut [f64]>,
-    pub vrho: Option<&'a mut [f64]>,
-    pub vsigma: Option<&'a mut [f64]>,
-    pub vlapl: Option<&'a mut [f64]>,
-    pub vtau: Option<&'a mut [f64]>,
-    pub v2rho2: Option<&'a mut [f64]>,
-    pub v2rhosigma: Option<&'a mut [f64]>,
-    pub v2rholapl: Option<&'a mut [f64]>,
-    pub v2rhotau: Option<&'a mut [f64]>,
-    pub v2sigma2: Option<&'a mut [f64]>,
-    pub v2sigmalapl: Option<&'a mut [f64]>,
-    pub v2sigmatau: Option<&'a mut [f64]>,
-    pub v2lapl2: Option<&'a mut [f64]>,
-    pub v2lapltau: Option<&'a mut [f64]>,
-    pub v2tau2: Option<&'a mut [f64]>,
-    pub v3rho3: Option<&'a mut [f64]>,
-    pub v3rho2sigma: Option<&'a mut [f64]>,
-    pub v3rho2lapl: Option<&'a mut [f64]>,
-    pub v3rho2tau: Option<&'a mut [f64]>,
-    pub v3rhosigma2: Option<&'a mut [f64]>,
-    pub v3rhosigmalapl: Option<&'a mut [f64]>,
-    pub v3rhosigmatau: Option<&'a mut [f64]>,
-    pub v3rholapl2: Option<&'a mut [f64]>,
-    pub v3rholapltau: Option<&'a mut [f64]>,
-    pub v3rhotau2: Option<&'a mut [f64]>,
-    pub v3sigma3: Option<&'a mut [f64]>,
-    pub v3sigma2lapl: Option<&'a mut [f64]>,
-    pub v3sigma2tau: Option<&'a mut [f64]>,
-    pub v3sigmalapl2: Option<&'a mut [f64]>,
-    pub v3sigmalapltau: Option<&'a mut [f64]>,
-    pub v3sigmatau2: Option<&'a mut [f64]>,
-    pub v3lapl3: Option<&'a mut [f64]>,
-    pub v3lapl2tau: Option<&'a mut [f64]>,
-    pub v3lapltau2: Option<&'a mut [f64]>,
-    pub v3tau3: Option<&'a mut [f64]>,
-    pub v4rho4: Option<&'a mut [f64]>,
-    pub v4rho3sigma: Option<&'a mut [f64]>,
-    pub v4rho3lapl: Option<&'a mut [f64]>,
-    pub v4rho3tau: Option<&'a mut [f64]>,
-    pub v4rho2sigma2: Option<&'a mut [f64]>,
-    pub v4rho2sigmalapl: Option<&'a mut [f64]>,
-    pub v4rho2sigmatau: Option<&'a mut [f64]>,
-    pub v4rho2lapl2: Option<&'a mut [f64]>,
-    pub v4rho2lapltau: Option<&'a mut [f64]>,
-    pub v4rho2tau2: Option<&'a mut [f64]>,
-    pub v4rhosigma3: Option<&'a mut [f64]>,
-    pub v4rhosigma2lapl: Option<&'a mut [f64]>,
-    pub v4rhosigma2tau: Option<&'a mut [f64]>,
-    pub v4rhosigmalapl2: Option<&'a mut [f64]>,
-    pub v4rhosigmalapltau: Option<&'a mut [f64]>,
-    pub v4rhosigmatau2: Option<&'a mut [f64]>,
-    pub v4rholapl3: Option<&'a mut [f64]>,
-    pub v4rholapl2tau: Option<&'a mut [f64]>,
-    pub v4rholapltau2: Option<&'a mut [f64]>,
-    pub v4rhotau3: Option<&'a mut [f64]>,
-    pub v4sigma4: Option<&'a mut [f64]>,
-    pub v4sigma3lapl: Option<&'a mut [f64]>,
-    pub v4sigma3tau: Option<&'a mut [f64]>,
-    pub v4sigma2lapl2: Option<&'a mut [f64]>,
-    pub v4sigma2lapltau: Option<&'a mut [f64]>,
-    pub v4sigma2tau2: Option<&'a mut [f64]>,
-    pub v4sigmalapl3: Option<&'a mut [f64]>,
-    pub v4sigmalapl2tau: Option<&'a mut [f64]>,
-    pub v4sigmalapltau2: Option<&'a mut [f64]>,
-    pub v4sigmatau3: Option<&'a mut [f64]>,
-    pub v4lapl4: Option<&'a mut [f64]>,
-    pub v4lapl3tau: Option<&'a mut [f64]>,
-    pub v4lapl2tau2: Option<&'a mut [f64]>,
-    pub v4lapltau3: Option<&'a mut [f64]>,
-    pub v4tau4: Option<&'a mut [f64]>,
+// ---------------------------------------------------------------------------
+// Preallocated output types
+// ---------------------------------------------------------------------------
+
+/// Unified output map for all functional families (preallocated buffers).
+///
+/// Keys are derivative component names (e.g. `"zk"`, `"vrho"`, `"v2rho2"`, ...).
+/// Key present = user provides that buffer; absent = null pointer passed to libxc.
+pub type LibXCCpuOutputMut<'a> = HashMap<&'static str, &'a mut [f64]>;
+
+/// Validate an output slice from the map and return a mutable pointer.
+/// Returns null if the key is absent; validates size if present.
+fn validate_output_ptr(
+    output: &LibXCCpuOutputMut,
+    key: &'static str,
+    npoints: usize,
+    expected_dim: i32,
+) -> Result<*mut f64, LibXCError> {
+    match output.get(key) {
+        Some(s) => {
+            let expected = npoints * (expected_dim as usize);
+            if s.len() != expected {
+                return Err(LibXCError::ComputeError(format!(
+                    "{key}: expected size {expected}, got {}",
+                    s.len()
+                )));
+            }
+            Ok(s.as_ptr() as *mut f64)
+        },
+        None => Ok(std::ptr::null_mut::<f64>()),
+    }
+}
+
+/// Validate all output entries for a given label set, returning a pointer map.
+fn validate_output_ptrs(
+    output: &LibXCCpuOutputMut,
+    labels: &[&'static str],
+    npoints: usize,
+    dim: &ffi::xc_dimensions,
+) -> Result<HashMap<&'static str, *mut f64>, LibXCError> {
+    let mut ptrs = HashMap::new();
+    for &label in labels {
+        let d = crate::layout_handling::get_dim(dim, label);
+        ptrs.insert(label, validate_output_ptr(output, label, npoints, d)?);
+    }
+    Ok(ptrs)
+}
+
+/// Helper to get a pointer from the validated map, defaulting to null.
+fn ptr_of(ptrs: &HashMap<&'static str, *mut f64>, key: &str) -> *mut f64 {
+    ptrs.get(key).copied().unwrap_or(std::ptr::null_mut())
 }
 
 impl LibXCFunctional {
@@ -149,6 +141,7 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let layout = self.lda_output_layout(npoints, flags);
         let mut buffer = vec![0.0f64; layout.total_size];
 
@@ -167,7 +160,7 @@ impl LibXCFunctional {
             ffi::xc_lda(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
+                rho_ptr,
                 ptr_for("zk"),
                 ptr_for("vrho"),
                 ptr_for("v2rho2"),
@@ -182,7 +175,7 @@ impl LibXCFunctional {
     pub fn compute_lda_with_output(
         &self,
         input: &LibXCCpuInput,
-        output: &mut LibXCLdaOutputMut,
+        output: &LibXCCpuOutputMut,
     ) -> Result<(), LibXCError> {
         let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
@@ -192,44 +185,20 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
-
-        let null = std::ptr::null_mut::<f64>();
-        let validate_and_ptr = |slice: &Option<&mut [f64]>,
-                                expected_dim: i32,
-                                name: &str|
-         -> Result<*mut f64, LibXCError> {
-            match slice {
-                Some(s) => {
-                    let expected = npoints * (expected_dim as usize);
-                    if s.len() != expected {
-                        return Err(LibXCError::ComputeError(format!(
-                            "{name}: expected size {expected}, got {}",
-                            s.len()
-                        )));
-                    }
-                    Ok(s.as_ptr() as *mut f64)
-                },
-                None => Ok(null),
-            }
-        };
-
-        let zk_ptr = validate_and_ptr(&output.zk, dim.zk, "zk")?;
-        let vrho_ptr = validate_and_ptr(&output.vrho, dim.vrho, "vrho")?;
-        let v2rho2_ptr = validate_and_ptr(&output.v2rho2, dim.v2rho2, "v2rho2")?;
-        let v3rho3_ptr = validate_and_ptr(&output.v3rho3, dim.v3rho3, "v3rho3")?;
-        let v4rho4_ptr = validate_and_ptr(&output.v4rho4, dim.v4rho4, "v4rho4")?;
+        let ptrs = validate_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, &dim)?;
 
         unsafe {
             ffi::xc_lda(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
-                zk_ptr,
-                vrho_ptr,
-                v2rho2_ptr,
-                v3rho3_ptr,
-                v4rho4_ptr,
+                rho_ptr,
+                ptr_of(&ptrs, "zk"),
+                ptr_of(&ptrs, "vrho"),
+                ptr_of(&ptrs, "v2rho2"),
+                ptr_of(&ptrs, "v3rho3"),
+                ptr_of(&ptrs, "v4rho4"),
             );
         }
         Ok(())
@@ -246,7 +215,6 @@ impl LibXCFunctional {
         let flags = flags.into();
         self.validate_flags(flags)?;
         let rho = require_input(input, "rho")?;
-        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
         if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
@@ -254,14 +222,9 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
-        let expected_sigma = npoints * (dim.sigma as usize);
-        if sigma.len() != expected_sigma {
-            return Err(LibXCError::ComputeError(format!(
-                "sigma: expected size {expected_sigma}, got {}",
-                sigma.len()
-            )));
-        }
+        let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
 
         let layout = self.gga_output_layout(npoints, flags);
         let mut buffer = vec![0.0f64; layout.total_size];
@@ -280,8 +243,8 @@ impl LibXCFunctional {
             ffi::xc_gga(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
-                sigma.as_ptr(),
+                rho_ptr,
+                sigma_ptr as *mut f64,
                 ptr_for("zk"),
                 ptr_for("vrho"),
                 ptr_for("vsigma"),
@@ -306,10 +269,9 @@ impl LibXCFunctional {
     pub fn compute_gga_with_output(
         &self,
         input: &LibXCCpuInput,
-        output: &mut LibXCGgaOutputMut,
+        output: &LibXCCpuOutputMut,
     ) -> Result<(), LibXCError> {
         let rho = require_input(input, "rho")?;
-        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
         if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
@@ -317,77 +279,32 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
-        let expected_sigma = npoints * (dim.sigma as usize);
-        if sigma.len() != expected_sigma {
-            return Err(LibXCError::ComputeError(format!(
-                "sigma: expected size {expected_sigma}, got {}",
-                sigma.len()
-            )));
-        }
-
-        let null = std::ptr::null_mut::<f64>();
-        let validate_and_ptr = |slice: &Option<&mut [f64]>,
-                                expected_dim: i32,
-                                name: &str|
-         -> Result<*mut f64, LibXCError> {
-            match slice {
-                Some(s) => {
-                    let expected = npoints * (expected_dim as usize);
-                    if s.len() != expected {
-                        return Err(LibXCError::ComputeError(format!(
-                            "{name}: expected size {expected}, got {}",
-                            s.len()
-                        )));
-                    }
-                    Ok(s.as_ptr() as *mut f64)
-                },
-                None => Ok(null),
-            }
-        };
-
-        let zk_ptr = validate_and_ptr(&output.zk, dim.zk, "zk")?;
-        let vrho_ptr = validate_and_ptr(&output.vrho, dim.vrho, "vrho")?;
-        let vsigma_ptr = validate_and_ptr(&output.vsigma, dim.vsigma, "vsigma")?;
-        let v2rho2_ptr = validate_and_ptr(&output.v2rho2, dim.v2rho2, "v2rho2")?;
-        let v2rhosigma_ptr = validate_and_ptr(&output.v2rhosigma, dim.v2rhosigma, "v2rhosigma")?;
-        let v2sigma2_ptr = validate_and_ptr(&output.v2sigma2, dim.v2sigma2, "v2sigma2")?;
-        let v3rho3_ptr = validate_and_ptr(&output.v3rho3, dim.v3rho3, "v3rho3")?;
-        let v3rho2sigma_ptr =
-            validate_and_ptr(&output.v3rho2sigma, dim.v3rho2sigma, "v3rho2sigma")?;
-        let v3rhosigma2_ptr =
-            validate_and_ptr(&output.v3rhosigma2, dim.v3rhosigma2, "v3rhosigma2")?;
-        let v3sigma3_ptr = validate_and_ptr(&output.v3sigma3, dim.v3sigma3, "v3sigma3")?;
-        let v4rho4_ptr = validate_and_ptr(&output.v4rho4, dim.v4rho4, "v4rho4")?;
-        let v4rho3sigma_ptr =
-            validate_and_ptr(&output.v4rho3sigma, dim.v4rho3sigma, "v4rho3sigma")?;
-        let v4rho2sigma2_ptr =
-            validate_and_ptr(&output.v4rho2sigma2, dim.v4rho2sigma2, "v4rho2sigma2")?;
-        let v4rhosigma3_ptr =
-            validate_and_ptr(&output.v4rhosigma3, dim.v4rhosigma3, "v4rhosigma3")?;
-        let v4sigma4_ptr = validate_and_ptr(&output.v4sigma4, dim.v4sigma4, "v4sigma4")?;
+        let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
+        let ptrs = validate_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, &dim)?;
 
         unsafe {
             ffi::xc_gga(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
-                sigma.as_ptr(),
-                zk_ptr,
-                vrho_ptr,
-                vsigma_ptr,
-                v2rho2_ptr,
-                v2rhosigma_ptr,
-                v2sigma2_ptr,
-                v3rho3_ptr,
-                v3rho2sigma_ptr,
-                v3rhosigma2_ptr,
-                v3sigma3_ptr,
-                v4rho4_ptr,
-                v4rho3sigma_ptr,
-                v4rho2sigma2_ptr,
-                v4rhosigma3_ptr,
-                v4sigma4_ptr,
+                rho_ptr,
+                sigma_ptr as *mut f64,
+                ptr_of(&ptrs, "zk"),
+                ptr_of(&ptrs, "vrho"),
+                ptr_of(&ptrs, "vsigma"),
+                ptr_of(&ptrs, "v2rho2"),
+                ptr_of(&ptrs, "v2rhosigma"),
+                ptr_of(&ptrs, "v2sigma2"),
+                ptr_of(&ptrs, "v3rho3"),
+                ptr_of(&ptrs, "v3rho2sigma"),
+                ptr_of(&ptrs, "v3rhosigma2"),
+                ptr_of(&ptrs, "v3sigma3"),
+                ptr_of(&ptrs, "v4rho4"),
+                ptr_of(&ptrs, "v4rho3sigma"),
+                ptr_of(&ptrs, "v4rho2sigma2"),
+                ptr_of(&ptrs, "v4rhosigma3"),
+                ptr_of(&ptrs, "v4sigma4"),
             );
         }
         Ok(())
@@ -404,7 +321,6 @@ impl LibXCFunctional {
         let flags = flags.into();
         self.validate_flags(flags)?;
         let rho = require_input(input, "rho")?;
-        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
         if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
@@ -412,51 +328,13 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
-
-        let expected_sigma = npoints * (dim.sigma as usize);
-        if sigma.len() != expected_sigma {
-            return Err(LibXCError::ComputeError(format!(
-                "sigma: expected size {expected_sigma}, got {}",
-                sigma.len()
-            )));
-        }
-
-        let lapl_ptr = match (input.get("lapl").copied(), needs_lapl) {
-            (Some(l), true) => {
-                let expected = npoints * (dim.lapl as usize);
-                if l.len() != expected {
-                    return Err(LibXCError::ComputeError(format!(
-                        "lapl: expected size {expected}, got {}",
-                        l.len()
-                    )));
-                }
-                l.as_ptr()
-            },
-            (None, true) => {
-                return Err(LibXCError::ComputeError("lapl required but not provided".into()));
-            },
-            (_, false) => std::ptr::null(),
-        };
-
-        let tau_ptr = match (input.get("tau").copied(), needs_tau) {
-            (Some(t), true) => {
-                let expected = npoints * (dim.tau as usize);
-                if t.len() != expected {
-                    return Err(LibXCError::ComputeError(format!(
-                        "tau: expected size {expected}, got {}",
-                        t.len()
-                    )));
-                }
-                t.as_ptr()
-            },
-            (None, true) => {
-                return Err(LibXCError::ComputeError("tau required but not provided".into()));
-            },
-            (_, false) => std::ptr::null(),
-        };
+        let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
+        let lapl_ptr = conditional_input_ptr(input, "lapl", npoints, dim.lapl, needs_lapl)?;
+        let tau_ptr = conditional_input_ptr(input, "tau", npoints, dim.tau, needs_tau)?;
 
         let layout = self.mgga_output_layout(npoints, flags);
         let mut buffer = vec![0.0f64; layout.total_size];
@@ -475,10 +353,10 @@ impl LibXCFunctional {
             ffi::xc_mgga(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
-                sigma.as_ptr(),
-                lapl_ptr,
-                tau_ptr,
+                rho_ptr,
+                sigma_ptr as *mut f64,
+                lapl_ptr as *mut f64,
+                tau_ptr as *mut f64,
                 ptr_for("zk"),
                 ptr_for("vrho"),
                 ptr_for("vsigma"),
@@ -555,14 +433,12 @@ impl LibXCFunctional {
     }
 
     /// Compute MGGA functional with user-preallocated output buffers.
-    #[allow(clippy::too_many_arguments)]
     pub fn compute_mgga_with_output(
         &self,
         input: &LibXCCpuInput,
-        output: &mut LibXCMggaOutputMut,
+        output: &LibXCCpuOutputMut,
     ) -> Result<(), LibXCError> {
         let rho = require_input(input, "rho")?;
-        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
         if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
@@ -570,260 +446,93 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
+        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
-
-        let expected_sigma = npoints * (dim.sigma as usize);
-        if sigma.len() != expected_sigma {
-            return Err(LibXCError::ComputeError(format!(
-                "sigma: expected size {expected_sigma}, got {}",
-                sigma.len()
-            )));
-        }
-
-        let lapl_ptr = match (input.get("lapl").copied(), needs_lapl) {
-            (Some(l), true) => {
-                let expected = npoints * (dim.lapl as usize);
-                if l.len() != expected {
-                    return Err(LibXCError::ComputeError(format!(
-                        "lapl: expected size {expected}, got {}",
-                        l.len()
-                    )));
-                }
-                l.as_ptr()
-            },
-            (None, true) => {
-                return Err(LibXCError::ComputeError("lapl required but not provided".into()));
-            },
-            (_, false) => std::ptr::null(),
-        };
-
-        let tau_ptr = match (input.get("tau").copied(), needs_tau) {
-            (Some(t), true) => {
-                let expected = npoints * (dim.tau as usize);
-                if t.len() != expected {
-                    return Err(LibXCError::ComputeError(format!(
-                        "tau: expected size {expected}, got {}",
-                        t.len()
-                    )));
-                }
-                t.as_ptr()
-            },
-            (None, true) => {
-                return Err(LibXCError::ComputeError("tau required but not provided".into()));
-            },
-            (_, false) => std::ptr::null(),
-        };
-
-        let null = std::ptr::null_mut::<f64>();
-        let validate_and_ptr = |slice: &Option<&mut [f64]>,
-                                expected_dim: i32,
-                                name: &str|
-         -> Result<*mut f64, LibXCError> {
-            match slice {
-                Some(s) => {
-                    let expected = npoints * (expected_dim as usize);
-                    if s.len() != expected {
-                        return Err(LibXCError::ComputeError(format!(
-                            "{name}: expected size {expected}, got {}",
-                            s.len()
-                        )));
-                    }
-                    Ok(s.as_ptr() as *mut f64)
-                },
-                None => Ok(null),
-            }
-        };
-
-        // Validate all output slices
-        let zk_ptr = validate_and_ptr(&output.zk, dim.zk, "zk")?;
-        let vrho_ptr = validate_and_ptr(&output.vrho, dim.vrho, "vrho")?;
-        let vsigma_ptr = validate_and_ptr(&output.vsigma, dim.vsigma, "vsigma")?;
-        let vlapl_ptr = validate_and_ptr(&output.vlapl, dim.vlapl, "vlapl")?;
-        let vtau_ptr = validate_and_ptr(&output.vtau, dim.vtau, "vtau")?;
-        let v2rho2_ptr = validate_and_ptr(&output.v2rho2, dim.v2rho2, "v2rho2")?;
-        let v2rhosigma_ptr = validate_and_ptr(&output.v2rhosigma, dim.v2rhosigma, "v2rhosigma")?;
-        let v2rholapl_ptr = validate_and_ptr(&output.v2rholapl, dim.v2rholapl, "v2rholapl")?;
-        let v2rhotau_ptr = validate_and_ptr(&output.v2rhotau, dim.v2rhotau, "v2rhotau")?;
-        let v2sigma2_ptr = validate_and_ptr(&output.v2sigma2, dim.v2sigma2, "v2sigma2")?;
-        let v2sigmalapl_ptr =
-            validate_and_ptr(&output.v2sigmalapl, dim.v2sigmalapl, "v2sigmalapl")?;
-        let v2sigmatau_ptr = validate_and_ptr(&output.v2sigmatau, dim.v2sigmatau, "v2sigmatau")?;
-        let v2lapl2_ptr = validate_and_ptr(&output.v2lapl2, dim.v2lapl2, "v2lapl2")?;
-        let v2lapltau_ptr = validate_and_ptr(&output.v2lapltau, dim.v2lapltau, "v2lapltau")?;
-        let v2tau2_ptr = validate_and_ptr(&output.v2tau2, dim.v2tau2, "v2tau2")?;
-        let v3rho3_ptr = validate_and_ptr(&output.v3rho3, dim.v3rho3, "v3rho3")?;
-        let v3rho2sigma_ptr =
-            validate_and_ptr(&output.v3rho2sigma, dim.v3rho2sigma, "v3rho2sigma")?;
-        let v3rho2lapl_ptr = validate_and_ptr(&output.v3rho2lapl, dim.v3rho2lapl, "v3rho2lapl")?;
-        let v3rho2tau_ptr = validate_and_ptr(&output.v3rho2tau, dim.v3rho2tau, "v3rho2tau")?;
-        let v3rhosigma2_ptr =
-            validate_and_ptr(&output.v3rhosigma2, dim.v3rhosigma2, "v3rhosigma2")?;
-        let v3rhosigmalapl_ptr =
-            validate_and_ptr(&output.v3rhosigmalapl, dim.v3rhosigmalapl, "v3rhosigmalapl")?;
-        let v3rhosigmatau_ptr =
-            validate_and_ptr(&output.v3rhosigmatau, dim.v3rhosigmatau, "v3rhosigmatau")?;
-        let v3rholapl2_ptr = validate_and_ptr(&output.v3rholapl2, dim.v3rholapl2, "v3rholapl2")?;
-        let v3rholapltau_ptr =
-            validate_and_ptr(&output.v3rholapltau, dim.v3rholapltau, "v3rholapltau")?;
-        let v3rhotau2_ptr = validate_and_ptr(&output.v3rhotau2, dim.v3rhotau2, "v3rhotau2")?;
-        let v3sigma3_ptr = validate_and_ptr(&output.v3sigma3, dim.v3sigma3, "v3sigma3")?;
-        let v3sigma2lapl_ptr =
-            validate_and_ptr(&output.v3sigma2lapl, dim.v3sigma2lapl, "v3sigma2lapl")?;
-        let v3sigma2tau_ptr =
-            validate_and_ptr(&output.v3sigma2tau, dim.v3sigma2tau, "v3sigma2tau")?;
-        let v3sigmalapl2_ptr =
-            validate_and_ptr(&output.v3sigmalapl2, dim.v3sigmalapl2, "v3sigmalapl2")?;
-        let v3sigmalapltau_ptr =
-            validate_and_ptr(&output.v3sigmalapltau, dim.v3sigmalapltau, "v3sigmalapltau")?;
-        let v3sigmatau2_ptr =
-            validate_and_ptr(&output.v3sigmatau2, dim.v3sigmatau2, "v3sigmatau2")?;
-        let v3lapl3_ptr = validate_and_ptr(&output.v3lapl3, dim.v3lapl3, "v3lapl3")?;
-        let v3lapl2tau_ptr = validate_and_ptr(&output.v3lapl2tau, dim.v3lapl2tau, "v3lapl2tau")?;
-        let v3lapltau2_ptr = validate_and_ptr(&output.v3lapltau2, dim.v3lapltau2, "v3lapltau2")?;
-        let v3tau3_ptr = validate_and_ptr(&output.v3tau3, dim.v3tau3, "v3tau3")?;
-        let v4rho4_ptr = validate_and_ptr(&output.v4rho4, dim.v4rho4, "v4rho4")?;
-        let v4rho3sigma_ptr =
-            validate_and_ptr(&output.v4rho3sigma, dim.v4rho3sigma, "v4rho3sigma")?;
-        let v4rho3lapl_ptr = validate_and_ptr(&output.v4rho3lapl, dim.v4rho3lapl, "v4rho3lapl")?;
-        let v4rho3tau_ptr = validate_and_ptr(&output.v4rho3tau, dim.v4rho3tau, "v4rho3tau")?;
-        let v4rho2sigma2_ptr =
-            validate_and_ptr(&output.v4rho2sigma2, dim.v4rho2sigma2, "v4rho2sigma2")?;
-        let v4rho2sigmalapl_ptr =
-            validate_and_ptr(&output.v4rho2sigmalapl, dim.v4rho2sigmalapl, "v4rho2sigmalapl")?;
-        let v4rho2sigmatau_ptr =
-            validate_and_ptr(&output.v4rho2sigmatau, dim.v4rho2sigmatau, "v4rho2sigmatau")?;
-        let v4rho2lapl2_ptr =
-            validate_and_ptr(&output.v4rho2lapl2, dim.v4rho2lapl2, "v4rho2lapl2")?;
-        let v4rho2lapltau_ptr =
-            validate_and_ptr(&output.v4rho2lapltau, dim.v4rho2lapltau, "v4rho2lapltau")?;
-        let v4rho2tau2_ptr = validate_and_ptr(&output.v4rho2tau2, dim.v4rho2tau2, "v4rho2tau2")?;
-        let v4rhosigma3_ptr =
-            validate_and_ptr(&output.v4rhosigma3, dim.v4rhosigma3, "v4rhosigma3")?;
-        let v4rhosigma2lapl_ptr =
-            validate_and_ptr(&output.v4rhosigma2lapl, dim.v4rhosigma2lapl, "v4rhosigma2lapl")?;
-        let v4rhosigma2tau_ptr =
-            validate_and_ptr(&output.v4rhosigma2tau, dim.v4rhosigma2tau, "v4rhosigma2tau")?;
-        let v4rhosigmalapl2_ptr =
-            validate_and_ptr(&output.v4rhosigmalapl2, dim.v4rhosigmalapl2, "v4rhosigmalapl2")?;
-        let v4rhosigmalapltau_ptr = validate_and_ptr(
-            &output.v4rhosigmalapltau,
-            dim.v4rhosigmalapltau,
-            "v4rhosigmalapltau",
-        )?;
-        let v4rhosigmatau2_ptr =
-            validate_and_ptr(&output.v4rhosigmatau2, dim.v4rhosigmatau2, "v4rhosigmatau2")?;
-        let v4rholapl3_ptr = validate_and_ptr(&output.v4rholapl3, dim.v4rholapl3, "v4rholapl3")?;
-        let v4rholapl2tau_ptr =
-            validate_and_ptr(&output.v4rholapl2tau, dim.v4rholapl2tau, "v4rholapl2tau")?;
-        let v4rholapltau2_ptr =
-            validate_and_ptr(&output.v4rholapltau2, dim.v4rholapltau2, "v4rholapltau2")?;
-        let v4rhotau3_ptr = validate_and_ptr(&output.v4rhotau3, dim.v4rhotau3, "v4rhotau3")?;
-        let v4sigma4_ptr = validate_and_ptr(&output.v4sigma4, dim.v4sigma4, "v4sigma4")?;
-        let v4sigma3lapl_ptr =
-            validate_and_ptr(&output.v4sigma3lapl, dim.v4sigma3lapl, "v4sigma3lapl")?;
-        let v4sigma3tau_ptr =
-            validate_and_ptr(&output.v4sigma3tau, dim.v4sigma3tau, "v4sigma3tau")?;
-        let v4sigma2lapl2_ptr =
-            validate_and_ptr(&output.v4sigma2lapl2, dim.v4sigma2lapl2, "v4sigma2lapl2")?;
-        let v4sigma2lapltau_ptr =
-            validate_and_ptr(&output.v4sigma2lapltau, dim.v4sigma2lapltau, "v4sigma2lapltau")?;
-        let v4sigma2tau2_ptr =
-            validate_and_ptr(&output.v4sigma2tau2, dim.v4sigma2tau2, "v4sigma2tau2")?;
-        let v4sigmalapl3_ptr =
-            validate_and_ptr(&output.v4sigmalapl3, dim.v4sigmalapl3, "v4sigmalapl3")?;
-        let v4sigmalapl2tau_ptr =
-            validate_and_ptr(&output.v4sigmalapl2tau, dim.v4sigmalapl2tau, "v4sigmalapl2tau")?;
-        let v4sigmalapltau2_ptr =
-            validate_and_ptr(&output.v4sigmalapltau2, dim.v4sigmalapltau2, "v4sigmalapltau2")?;
-        let v4sigmatau3_ptr =
-            validate_and_ptr(&output.v4sigmatau3, dim.v4sigmatau3, "v4sigmatau3")?;
-        let v4lapl4_ptr = validate_and_ptr(&output.v4lapl4, dim.v4lapl4, "v4lapl4")?;
-        let v4lapl3tau_ptr = validate_and_ptr(&output.v4lapl3tau, dim.v4lapl3tau, "v4lapl3tau")?;
-        let v4lapl2tau2_ptr =
-            validate_and_ptr(&output.v4lapl2tau2, dim.v4lapl2tau2, "v4lapl2tau2")?;
-        let v4lapltau3_ptr = validate_and_ptr(&output.v4lapltau3, dim.v4lapltau3, "v4lapltau3")?;
-        let v4tau4_ptr = validate_and_ptr(&output.v4tau4, dim.v4tau4, "v4tau4")?;
+        let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
+        let lapl_ptr = conditional_input_ptr(input, "lapl", npoints, dim.lapl, needs_lapl)?;
+        let tau_ptr = conditional_input_ptr(input, "tau", npoints, dim.tau, needs_tau)?;
+        let ptrs = validate_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, &dim)?;
 
         unsafe {
             ffi::xc_mgga(
                 self.ptr,
                 npoints,
-                rho.as_ptr(),
-                sigma.as_ptr(),
-                lapl_ptr,
-                tau_ptr,
-                zk_ptr,
-                vrho_ptr,
-                vsigma_ptr,
-                vlapl_ptr,
-                vtau_ptr,
-                v2rho2_ptr,
-                v2rhosigma_ptr,
-                v2rholapl_ptr,
-                v2rhotau_ptr,
-                v2sigma2_ptr,
-                v2sigmalapl_ptr,
-                v2sigmatau_ptr,
-                v2lapl2_ptr,
-                v2lapltau_ptr,
-                v2tau2_ptr,
-                v3rho3_ptr,
-                v3rho2sigma_ptr,
-                v3rho2lapl_ptr,
-                v3rho2tau_ptr,
-                v3rhosigma2_ptr,
-                v3rhosigmalapl_ptr,
-                v3rhosigmatau_ptr,
-                v3rholapl2_ptr,
-                v3rholapltau_ptr,
-                v3rhotau2_ptr,
-                v3sigma3_ptr,
-                v3sigma2lapl_ptr,
-                v3sigma2tau_ptr,
-                v3sigmalapl2_ptr,
-                v3sigmalapltau_ptr,
-                v3sigmatau2_ptr,
-                v3lapl3_ptr,
-                v3lapl2tau_ptr,
-                v3lapltau2_ptr,
-                v3tau3_ptr,
-                v4rho4_ptr,
-                v4rho3sigma_ptr,
-                v4rho3lapl_ptr,
-                v4rho3tau_ptr,
-                v4rho2sigma2_ptr,
-                v4rho2sigmalapl_ptr,
-                v4rho2sigmatau_ptr,
-                v4rho2lapl2_ptr,
-                v4rho2lapltau_ptr,
-                v4rho2tau2_ptr,
-                v4rhosigma3_ptr,
-                v4rhosigma2lapl_ptr,
-                v4rhosigma2tau_ptr,
-                v4rhosigmalapl2_ptr,
-                v4rhosigmalapltau_ptr,
-                v4rhosigmatau2_ptr,
-                v4rholapl3_ptr,
-                v4rholapl2tau_ptr,
-                v4rholapltau2_ptr,
-                v4rhotau3_ptr,
-                v4sigma4_ptr,
-                v4sigma3lapl_ptr,
-                v4sigma3tau_ptr,
-                v4sigma2lapl2_ptr,
-                v4sigma2lapltau_ptr,
-                v4sigma2tau2_ptr,
-                v4sigmalapl3_ptr,
-                v4sigmalapl2tau_ptr,
-                v4sigmalapltau2_ptr,
-                v4sigmatau3_ptr,
-                v4lapl4_ptr,
-                v4lapl3tau_ptr,
-                v4lapl2tau2_ptr,
-                v4lapltau3_ptr,
-                v4tau4_ptr,
+                rho_ptr,
+                sigma_ptr as *mut f64,
+                lapl_ptr as *mut f64,
+                tau_ptr as *mut f64,
+                ptr_of(&ptrs, "zk"),
+                ptr_of(&ptrs, "vrho"),
+                ptr_of(&ptrs, "vsigma"),
+                ptr_of(&ptrs, "vlapl"),
+                ptr_of(&ptrs, "vtau"),
+                ptr_of(&ptrs, "v2rho2"),
+                ptr_of(&ptrs, "v2rhosigma"),
+                ptr_of(&ptrs, "v2rholapl"),
+                ptr_of(&ptrs, "v2rhotau"),
+                ptr_of(&ptrs, "v2sigma2"),
+                ptr_of(&ptrs, "v2sigmalapl"),
+                ptr_of(&ptrs, "v2sigmatau"),
+                ptr_of(&ptrs, "v2lapl2"),
+                ptr_of(&ptrs, "v2lapltau"),
+                ptr_of(&ptrs, "v2tau2"),
+                ptr_of(&ptrs, "v3rho3"),
+                ptr_of(&ptrs, "v3rho2sigma"),
+                ptr_of(&ptrs, "v3rho2lapl"),
+                ptr_of(&ptrs, "v3rho2tau"),
+                ptr_of(&ptrs, "v3rhosigma2"),
+                ptr_of(&ptrs, "v3rhosigmalapl"),
+                ptr_of(&ptrs, "v3rhosigmatau"),
+                ptr_of(&ptrs, "v3rholapl2"),
+                ptr_of(&ptrs, "v3rholapltau"),
+                ptr_of(&ptrs, "v3rhotau2"),
+                ptr_of(&ptrs, "v3sigma3"),
+                ptr_of(&ptrs, "v3sigma2lapl"),
+                ptr_of(&ptrs, "v3sigma2tau"),
+                ptr_of(&ptrs, "v3sigmalapl2"),
+                ptr_of(&ptrs, "v3sigmalapltau"),
+                ptr_of(&ptrs, "v3sigmatau2"),
+                ptr_of(&ptrs, "v3lapl3"),
+                ptr_of(&ptrs, "v3lapl2tau"),
+                ptr_of(&ptrs, "v3lapltau2"),
+                ptr_of(&ptrs, "v3tau3"),
+                ptr_of(&ptrs, "v4rho4"),
+                ptr_of(&ptrs, "v4rho3sigma"),
+                ptr_of(&ptrs, "v4rho3lapl"),
+                ptr_of(&ptrs, "v4rho3tau"),
+                ptr_of(&ptrs, "v4rho2sigma2"),
+                ptr_of(&ptrs, "v4rho2sigmalapl"),
+                ptr_of(&ptrs, "v4rho2sigmatau"),
+                ptr_of(&ptrs, "v4rho2lapl2"),
+                ptr_of(&ptrs, "v4rho2lapltau"),
+                ptr_of(&ptrs, "v4rho2tau2"),
+                ptr_of(&ptrs, "v4rhosigma3"),
+                ptr_of(&ptrs, "v4rhosigma2lapl"),
+                ptr_of(&ptrs, "v4rhosigma2tau"),
+                ptr_of(&ptrs, "v4rhosigmalapl2"),
+                ptr_of(&ptrs, "v4rhosigmalapltau"),
+                ptr_of(&ptrs, "v4rhosigmatau2"),
+                ptr_of(&ptrs, "v4rholapl3"),
+                ptr_of(&ptrs, "v4rholapl2tau"),
+                ptr_of(&ptrs, "v4rholapltau2"),
+                ptr_of(&ptrs, "v4rhotau3"),
+                ptr_of(&ptrs, "v4sigma4"),
+                ptr_of(&ptrs, "v4sigma3lapl"),
+                ptr_of(&ptrs, "v4sigma3tau"),
+                ptr_of(&ptrs, "v4sigma2lapl2"),
+                ptr_of(&ptrs, "v4sigma2lapltau"),
+                ptr_of(&ptrs, "v4sigma2tau2"),
+                ptr_of(&ptrs, "v4sigmalapl3"),
+                ptr_of(&ptrs, "v4sigmalapl2tau"),
+                ptr_of(&ptrs, "v4sigmalapltau2"),
+                ptr_of(&ptrs, "v4sigmatau3"),
+                ptr_of(&ptrs, "v4lapl4"),
+                ptr_of(&ptrs, "v4lapl3tau"),
+                ptr_of(&ptrs, "v4lapl2tau2"),
+                ptr_of(&ptrs, "v4lapltau3"),
+                ptr_of(&ptrs, "v4tau4"),
             );
         }
         Ok(())
