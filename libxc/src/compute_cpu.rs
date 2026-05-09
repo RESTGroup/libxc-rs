@@ -123,16 +123,16 @@ fn ptr_of(ptrs: &HashMap<&'static str, *mut f64>, key: &str) -> *mut f64 {
 }
 
 impl LibXCFunctional {
-    // -- LDA compute --------------------------------------------------------
+    // -- LDA private helpers -----------------------------------------------
 
-    /// Compute LDA functional with automatic allocation.
-    /// Returns `(buffer, layout)` where buffer is a contiguous f64 array.
-    pub fn compute_lda(
+    /// Validate input and compute output layout for LDA.
+    /// Returns `(npoints, rho_ptr, layout)`.
+    fn lda_prepare(
         &self,
         input: &LibXCCpuInput,
-        flags: impl Into<LibXCDerivativeFlags>,
-    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
-        let flags = flags.into();
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(usize, *const f64, LibXCOutputLayout), LibXCError> {
+        let flags = deriv_flags.into();
         self.validate_flags(flags)?;
         let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
@@ -142,21 +142,24 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
-        let rho_ptr = rho.as_ptr();
         let layout = self.lda_output_layout(npoints, flags);
-        let mut buffer = vec![0.0f64; layout.total_size];
+        Ok((npoints, rho.as_ptr(), layout))
+    }
 
-        // Build pointers for each output component
-        let null = std::ptr::null_mut::<f64>();
-        let base = buffer.as_mut_ptr();
-        let ptr_for = |name: &str| -> *mut f64 {
-            if let Some(range) = layout.get(name) {
-                unsafe { base.add(range.start) }
-            } else {
-                null
+    /// Invoke `xc_lda` FFI call, writing into `output` according to `layout`.
+    fn lda_call(
+        &self,
+        npoints: usize,
+        rho_ptr: *const f64,
+        output: &mut [f64],
+        layout: &LibXCOutputLayout,
+    ) {
+        let mut ptr_for = |name: &str| -> *mut f64 {
+            match layout.get(name) {
+                Some(range) => unsafe { output.as_mut_ptr().add(range.start) },
+                None => std::ptr::null_mut::<f64>(),
             }
         };
-
         unsafe {
             ffi::xc_lda(
                 self.ptr,
@@ -169,6 +172,40 @@ impl LibXCFunctional {
                 ptr_for("v4rho4"),
             );
         }
+    }
+
+    // -- LDA compute --------------------------------------------------------
+
+    /// Compute LDA functional with preallocated output buffer slice. Validates
+    /// buffer sizes and passes null for absent components.
+    pub fn compute_lda_with_unsliced_output(
+        &self,
+        input: &LibXCCpuInput,
+        output: &mut [f64],
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<LibXCOutputLayout, LibXCError> {
+        let (npoints, rho_ptr, layout) = self.lda_prepare(input, deriv_flags)?;
+        if output.len() < layout.total_size {
+            return Err(LibXCError::ComputeError(format!(
+                "output buffer has too small size: expected {}, got {}",
+                layout.total_size,
+                output.len()
+            )));
+        }
+        self.lda_call(npoints, rho_ptr, output, &layout);
+        Ok(layout)
+    }
+
+    /// Compute LDA functional with automatic allocation.
+    /// Returns `(buffer, layout)` where buffer is a contiguous f64 array.
+    pub fn compute_lda(
+        &self,
+        input: &LibXCCpuInput,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let (npoints, rho_ptr, layout) = self.lda_prepare(input, flags)?;
+        let mut buffer = vec![0.0f64; layout.total_size];
+        self.lda_call(npoints, rho_ptr, &mut buffer, &layout);
         Ok((buffer, layout))
     }
 
@@ -205,15 +242,16 @@ impl LibXCFunctional {
         Ok(())
     }
 
-    // -- GGA compute --------------------------------------------------------
+    // -- GGA private helpers -----------------------------------------------
 
-    /// Compute GGA functional with automatic allocation.
-    pub fn compute_gga(
+    /// Validate input and compute output layout for GGA.
+    /// Returns `(npoints, rho_ptr, sigma_ptr, layout)`.
+    fn gga_prepare(
         &self,
         input: &LibXCCpuInput,
-        flags: impl Into<LibXCDerivativeFlags>,
-    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
-        let flags = flags.into();
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(usize, *const f64, *const f64, LibXCOutputLayout), LibXCError> {
+        let flags = deriv_flags.into();
         self.validate_flags(flags)?;
         let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
@@ -223,23 +261,27 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
-        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
         let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
-
         let layout = self.gga_output_layout(npoints, flags);
-        let mut buffer = vec![0.0f64; layout.total_size];
+        Ok((npoints, rho.as_ptr(), sigma_ptr, layout))
+    }
 
-        let null = std::ptr::null_mut::<f64>();
-        let base = buffer.as_mut_ptr();
-        let ptr_for = |name: &str| -> *mut f64 {
-            if let Some(range) = layout.get(name) {
-                unsafe { base.add(range.start) }
-            } else {
-                null
+    /// Invoke `xc_gga` FFI call, writing into `output` according to `layout`.
+    fn gga_call(
+        &self,
+        npoints: usize,
+        rho_ptr: *const f64,
+        sigma_ptr: *const f64,
+        output: &mut [f64],
+        layout: &LibXCOutputLayout,
+    ) {
+        let mut ptr_for = |name: &str| -> *mut f64 {
+            match layout.get(name) {
+                Some(range) => unsafe { output.as_mut_ptr().add(range.start) },
+                None => std::ptr::null_mut::<f64>(),
             }
         };
-
         unsafe {
             ffi::xc_gga(
                 self.ptr,
@@ -263,6 +305,39 @@ impl LibXCFunctional {
                 ptr_for("v4sigma4"),
             );
         }
+    }
+
+    // -- GGA compute --------------------------------------------------------
+
+    /// Compute GGA functional with preallocated output buffer slice. Validates
+    /// buffer sizes and passes null for absent components.
+    pub fn compute_gga_with_unsliced_output(
+        &self,
+        input: &LibXCCpuInput,
+        output: &mut [f64],
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<LibXCOutputLayout, LibXCError> {
+        let (npoints, rho_ptr, sigma_ptr, layout) = self.gga_prepare(input, deriv_flags)?;
+        if output.len() < layout.total_size {
+            return Err(LibXCError::ComputeError(format!(
+                "output buffer has too small size: expected {}, got {}",
+                layout.total_size,
+                output.len()
+            )));
+        }
+        self.gga_call(npoints, rho_ptr, sigma_ptr, output, &layout);
+        Ok(layout)
+    }
+
+    /// Compute GGA functional with automatic allocation.
+    pub fn compute_gga(
+        &self,
+        input: &LibXCCpuInput,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let (npoints, rho_ptr, sigma_ptr, layout) = self.gga_prepare(input, flags)?;
+        let mut buffer = vec![0.0f64; layout.total_size];
+        self.gga_call(npoints, rho_ptr, sigma_ptr, &mut buffer, &layout);
         Ok((buffer, layout))
     }
 
@@ -311,15 +386,19 @@ impl LibXCFunctional {
         Ok(())
     }
 
-    // -- MGGA compute -------------------------------------------------------
+    // -- MGGA private helpers ----------------------------------------------
 
-    /// Compute MGGA functional with automatic allocation.
-    pub fn compute_mgga(
+    /// Validate input and compute output layout for MGGA.
+    /// Returns `(npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout)`.
+    fn mgga_prepare(
         &self,
         input: &LibXCCpuInput,
-        flags: impl Into<LibXCDerivativeFlags>,
-    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
-        let flags = flags.into();
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<
+        (usize, *const f64, *const f64, *const f64, *const f64, LibXCOutputLayout),
+        LibXCError,
+    > {
+        let flags = deriv_flags.into();
         self.validate_flags(flags)?;
         let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
@@ -329,24 +408,31 @@ impl LibXCFunctional {
             ));
         }
         let npoints = rho.len() / nspin;
-        let rho_ptr = rho.as_ptr();
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
         let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
         let lapl_ptr = conditional_input_ptr(input, "lapl", npoints, dim.lapl, needs_lapl)?;
         let tau_ptr = conditional_input_ptr(input, "tau", npoints, dim.tau, needs_tau)?;
-
         let layout = self.mgga_output_layout(npoints, flags);
-        let mut buffer = vec![0.0f64; layout.total_size];
+        Ok((npoints, rho.as_ptr(), sigma_ptr, lapl_ptr, tau_ptr, layout))
+    }
 
-        let null = std::ptr::null_mut::<f64>();
-        let base = buffer.as_mut_ptr();
-        let ptr_for = |name: &str| -> *mut f64 {
-            if let Some(range) = layout.get(name) {
-                unsafe { base.add(range.start) }
-            } else {
-                null
+    /// Invoke `xc_mgga` FFI call, writing into `output` according to `layout`.
+    fn mgga_call(
+        &self,
+        npoints: usize,
+        rho_ptr: *const f64,
+        sigma_ptr: *const f64,
+        lapl_ptr: *const f64,
+        tau_ptr: *const f64,
+        output: &mut [f64],
+        layout: &LibXCOutputLayout,
+    ) {
+        let mut ptr_for = |name: &str| -> *mut f64 {
+            match layout.get(name) {
+                Some(range) => unsafe { output.as_mut_ptr().add(range.start) },
+                None => std::ptr::null_mut::<f64>(),
             }
         };
 
@@ -430,6 +516,41 @@ impl LibXCFunctional {
                 ptr_for("v4tau4"),
             );
         }
+    }
+
+    // -- MGGA compute -------------------------------------------------------
+
+    /// Compute MGGA functional with preallocated output buffer slice. Validates
+    /// buffer sizes and passes null for absent components.
+    pub fn compute_mgga_with_unsliced_output(
+        &self,
+        input: &LibXCCpuInput,
+        output: &mut [f64],
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<LibXCOutputLayout, LibXCError> {
+        let (npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout) =
+            self.mgga_prepare(input, deriv_flags)?;
+        if output.len() < layout.total_size {
+            return Err(LibXCError::ComputeError(format!(
+                "output buffer has too small size: expected {}, got {}",
+                layout.total_size,
+                output.len()
+            )));
+        }
+        self.mgga_call(npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, output, &layout);
+        Ok(layout)
+    }
+
+    /// Compute MGGA functional with automatic allocation.
+    pub fn compute_mgga(
+        &self,
+        input: &LibXCCpuInput,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        let (npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout) =
+            self.mgga_prepare(input, flags)?;
+        let mut buffer = vec![0.0f64; layout.total_size];
+        self.mgga_call(npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &mut buffer, &layout);
         Ok((buffer, layout))
     }
 
