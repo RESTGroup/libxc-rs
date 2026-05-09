@@ -1,12 +1,19 @@
 use libxc_ffi::ffi;
 
+/// Spin polarization of the functional.
+///
+/// The numeric values have actual meaning:
+/// - Unpolarized: 1 (input density is only `rho` with grids size);
+/// - Polarized: 2 (input density is `rho_alpha` and `rho_beta`, double of grids
+///   size).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
 pub enum LibXCSpin {
-    Polarized = ffi::XC_POLARIZED,
     Unpolarized = ffi::XC_UNPOLARIZED,
+    Polarized = ffi::XC_POLARIZED,
 }
 
+/// Whether the functional is relativistic or non-relativistic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
 pub enum LibXCRelavistic {
@@ -14,6 +21,8 @@ pub enum LibXCRelavistic {
     Relativistic = ffi::XC_RELATIVISTIC,
 }
 
+/// The kind of the functional: exchange, correlation, exchange-correlation, or
+/// kinetic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
 pub enum LibXCFunctionalKind {
@@ -23,6 +32,7 @@ pub enum LibXCFunctionalKind {
     Kinetic = ffi::XC_KINETIC,
 }
 
+/// The family of the functional: LDA, GGA, MGGA and its hybrid variants.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
 pub enum LibXCFamily {
@@ -36,6 +46,7 @@ pub enum LibXCFamily {
     HybLDA = ffi::XC_FAMILY_HYB_LDA,
 }
 
+/// Whether the functional can be evaluated on device (CUDA) or host (CPU).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
 pub enum LibXCDeviceFlag {
@@ -43,6 +54,7 @@ pub enum LibXCDeviceFlag {
     OnHost = ffi::XC_FLAGS_ON_HOST,
 }
 
+/// Bitflags for functional properties.
 #[enumflags2::bitflags]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 #[repr(u32)]
@@ -69,11 +81,46 @@ pub enum LibXCFlags {
     OnHost = ffi::XC_FLAGS_ON_HOST,
 }
 
+/// The functional identifier type, which is alias of FFI enum `XcFuncId`.
+///
+/// Note that different versions of libxc may have different sets of
+/// functionals. Please check your libxc version, and the cargo feature you
+/// enabled to make sure the functional you want is available.
+pub use libxc_ffi::xc_funcs::XcFuncId as LibXCFuncId;
+
+lazy_static::lazy_static! {
+    /// Full list of functional identifiers (lazily generated).
+    pub static ref LIBXC_FUNC_ENUM: Vec<LibXCFuncId> = {
+        use strum::IntoEnumIterator;
+        LibXCFuncId::iter().collect()
+    };
+
+    /// Full list of functional identifiers strings (lazily generated).
+    pub static ref LIBXC_FUNC_STR: Vec<String> = {
+        use strum::IntoEnumIterator;
+        LibXCFuncId::iter().map(|func_id| format!("{:?}", func_id)).collect()
+    };
+
+    /// Mapping from functional identifier string to number id (lazily generated).
+    pub static ref LIBXC_FUNC_MAP: indexmap::IndexMap<String, u32> = {
+        use strum::IntoEnumIterator;
+        let mut map = indexmap::IndexMap::new();
+        for func_id in LibXCFuncId::iter() {
+            let name = format!("{:?}", func_id);
+            let id = func_id as u32;
+            map.insert(name, id);
+        }
+        map
+    };
+}
+
 /// Re-export all enum items for easy access.
 pub mod libxc_enum_items {
     use super::*;
+
     pub use LibXCFamily::*;
     pub use LibXCFlags::*;
+    pub use LibXCFuncId::*;
     pub use LibXCFunctionalKind::*;
     pub use LibXCRelavistic::*;
     pub use LibXCSpin::*;
