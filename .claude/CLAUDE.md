@@ -22,6 +22,21 @@ Important files for FFI and wrapper development:
 - `pylibxc/example_densities.py`: this is not useful for wrapper, but useful for testing.
 - `testsuite/regression`: this is useful for implementation correctness testing. However, these tests are too much, we may select some of them for testing, but not all of them.
 
+## Using pylibxc for reference and testing
+
+The Python wrapper `pylibxc` in the original libxc repository is the primary reference for the Rust wrapper implementation.
+
+Unless the human developer requests you to debug and run with python wrapper (pylibxc), you can just read the code of pylibxc for reference. The following instructions are for the case when you need to run and debug with pylibxc.
+
+In `CLAUDE.local.md`, you should either request the human developer to set up a working pylibxc, or create a temporary copy of pylibxc.
+
+If encountered import errors, you should ask the human developer or patch the code by the following steps:
+
+- `core.py`: Set `__libxc_path` to the actual library path (or rely on `find_library`)
+- `functional.py`: Comment out `xc_func_init_flags` binding (which is introduced in v7.1); always use `xc_func_init` in `__init__`
+
+The remaining devel changes (array_backend, bug fixes, boolean flags) are backward-compatible and do not need reverting.
+
 ## Build and test
 
 We only test crate `libxc` during development.
