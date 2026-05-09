@@ -66,12 +66,13 @@ def generate_enum_file(version_str, feature_name, functionals):
 
 #![allow(non_camel_case_types)]
 #![allow(clippy::enum_clike_unportable_variant)]
+use strum::EnumIter;
 
 /// Libxc functional identifier numbers.
 ///
 /// Each variant corresponds to a `XC_*` define in the libxc headers.
 /// The numeric values match the C library exactly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter)]
 #[repr(u32)]
 pub enum XcFuncId {{
 {variants_str}

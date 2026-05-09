@@ -13,6 +13,7 @@ license.workspace = true
 
 [dependencies]
 libloading = { version = "0.8", optional = true }
+strum = { version = "0.28", features = ["derive"] }
 
 [features]
 default = ["api-v7_0", "dynamic_loading"]
