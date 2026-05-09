@@ -659,4 +659,64 @@ impl LibXCFunctional {
         }
         Ok(())
     }
+
+    // -- Unified dispatch ---------------------------------------------------
+
+    /// Compute functional with automatic allocation, dispatching by family.
+    ///
+    /// Inspects `self.family()` and delegates to `compute_lda`, `compute_gga`,
+    /// or `compute_mgga` accordingly. Hybrid families (HybLDA, HybGGA, HybMGGA)
+    /// are dispatched to their base family's compute.
+    pub fn compute_xc(
+        &self,
+        input: &LibXCCpuInput,
+        flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        use crate::prelude::libxc_enum_items::*;
+        match self.family() {
+            LDA | HybLDA => self.compute_lda(input, flags),
+            GGA | HybGGA => self.compute_gga(input, flags),
+            MGGA | HybMGGA => self.compute_mgga(input, flags),
+            OEP | LCA => Err(LibXCError::ComputeError(
+                "compute_xc: OEP/LCA family is not supported".into(),
+            )),
+        }
+    }
+
+    /// Compute functional with preallocated output buffer slice, dispatching by
+    /// family.
+    pub fn compute_xc_with_unsliced_output(
+        &self,
+        input: &LibXCCpuInput,
+        output: &mut [f64],
+        deriv_flags: impl Into<LibXCDerivativeFlags>,
+    ) -> Result<LibXCOutputLayout, LibXCError> {
+        use crate::prelude::libxc_enum_items::*;
+        match self.family() {
+            LDA | HybLDA => self.compute_lda_with_unsliced_output(input, output, deriv_flags),
+            GGA | HybGGA => self.compute_gga_with_unsliced_output(input, output, deriv_flags),
+            MGGA | HybMGGA => self.compute_mgga_with_unsliced_output(input, output, deriv_flags),
+            OEP | LCA => Err(LibXCError::ComputeError(
+                "compute_xc: OEP/LCA family is not supported".into(),
+            )),
+        }
+    }
+
+    /// Compute functional with user-preallocated output buffers, dispatching by
+    /// family.
+    pub fn compute_xc_with_output(
+        &self,
+        input: &LibXCCpuInput,
+        output: &LibXCCpuOutputMut,
+    ) -> Result<(), LibXCError> {
+        use crate::prelude::libxc_enum_items::*;
+        match self.family() {
+            LDA | HybLDA => self.compute_lda_with_output(input, output),
+            GGA | HybGGA => self.compute_gga_with_output(input, output),
+            MGGA | HybMGGA => self.compute_mgga_with_output(input, output),
+            OEP | LCA => Err(LibXCError::ComputeError(
+                "compute_xc: OEP/LCA family is not supported".into(),
+            )),
+        }
+    }
 }
