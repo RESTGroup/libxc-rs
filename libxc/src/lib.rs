@@ -18,4 +18,5 @@ pub mod prelude {
     pub(crate) use enumflags2::BitFlags;
     pub(crate) use indexmap::IndexMap;
     pub(crate) use libxc_ffi::ffi;
+    pub(crate) use std::collections::HashMap;
 }

@@ -2,23 +2,25 @@
 
 use crate::prelude::*;
 
-/// Input for LDA computation.
-pub struct LibXCLdaInput<'a> {
-    pub rho: &'a [f64],
-}
+/// Unified input map for all functional families.
+///
+/// Keys are `"rho"`, `"sigma"`, `"lapl"`, `"tau"`.
+/// Required keys depend on the functional family:
+/// - LDA: `"rho"`
+/// - GGA: `"rho"`, `"sigma"`
+/// - MGGA: `"rho"`, `"sigma"`; `"lapl"` and `"tau"` if the functional needs
+///   them
+pub type LibXCCpuInput<'a> = HashMap<&'static str, &'a [f64]>;
 
-/// Input for GGA computation.
-pub struct LibXCGgaInput<'a> {
-    pub rho: &'a [f64],
-    pub sigma: &'a [f64],
-}
-
-/// Input for MGGA computation.
-pub struct LibXCMggaInput<'a> {
-    pub rho: &'a [f64],
-    pub sigma: &'a [f64],
-    pub lapl: Option<&'a [f64]>,
-    pub tau: Option<&'a [f64]>,
+/// Extract a required input slice from the map.
+fn require_input<'a>(
+    input: &LibXCCpuInput<'a>,
+    key: &'static str,
+) -> Result<&'a [f64], LibXCError> {
+    input
+        .get(&key)
+        .map(|s| *s)
+        .ok_or_else(|| LibXCError::ComputeError(format!("{key}: required input not provided")))
 }
 
 // ---------------------------------------------------------------------------
@@ -134,18 +136,19 @@ impl LibXCFunctional {
     /// Returns `(buffer, layout)` where buffer is a contiguous f64 array.
     pub fn compute_lda(
         &self,
-        input: &LibXCLdaInput,
+        input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         let flags = flags.into();
         self.validate_flags(flags)?;
+        let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let layout = self.lda_output_layout(npoints, flags);
         let mut buffer = vec![0.0f64; layout.total_size];
 
@@ -164,7 +167,7 @@ impl LibXCFunctional {
             ffi::xc_lda(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
+                rho.as_ptr(),
                 ptr_for("zk"),
                 ptr_for("vrho"),
                 ptr_for("v2rho2"),
@@ -178,24 +181,20 @@ impl LibXCFunctional {
     /// Compute LDA functional with user-preallocated output buffers.
     pub fn compute_lda_with_output(
         &self,
-        input: &LibXCLdaInput,
+        input: &LibXCCpuInput,
         output: &mut LibXCLdaOutputMut,
     ) -> Result<(), LibXCError> {
+        let rho = require_input(input, "rho")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let dim = self.dim();
 
         let null = std::ptr::null_mut::<f64>();
-        // Validates the size of a user-provided output slice and returns a mutable
-        // pointer. Uses as_ptr() + cast because the Option<&mut [f64]> is
-        // behind a shared reference in the closure, preventing as_mut_ptr().
-        // The cast is safe: the &mut [f64] proves the data is valid for
-        // writing.
         let validate_and_ptr = |slice: &Option<&mut [f64]>,
                                 expected_dim: i32,
                                 name: &str|
@@ -225,7 +224,7 @@ impl LibXCFunctional {
             ffi::xc_lda(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
+                rho.as_ptr(),
                 zk_ptr,
                 vrho_ptr,
                 v2rho2_ptr,
@@ -241,24 +240,26 @@ impl LibXCFunctional {
     /// Compute GGA functional with automatic allocation.
     pub fn compute_gga(
         &self,
-        input: &LibXCGgaInput,
+        input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         let flags = flags.into();
         self.validate_flags(flags)?;
+        let rho = require_input(input, "rho")?;
+        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let dim = self.dim();
         let expected_sigma = npoints * (dim.sigma as usize);
-        if input.sigma.len() != expected_sigma {
+        if sigma.len() != expected_sigma {
             return Err(LibXCError::ComputeError(format!(
                 "sigma: expected size {expected_sigma}, got {}",
-                input.sigma.len()
+                sigma.len()
             )));
         }
 
@@ -279,8 +280,8 @@ impl LibXCFunctional {
             ffi::xc_gga(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
-                input.sigma.as_ptr(),
+                rho.as_ptr(),
+                sigma.as_ptr(),
                 ptr_for("zk"),
                 ptr_for("vrho"),
                 ptr_for("vsigma"),
@@ -304,22 +305,24 @@ impl LibXCFunctional {
     /// Compute GGA functional with user-preallocated output buffers.
     pub fn compute_gga_with_output(
         &self,
-        input: &LibXCGgaInput,
+        input: &LibXCCpuInput,
         output: &mut LibXCGgaOutputMut,
     ) -> Result<(), LibXCError> {
+        let rho = require_input(input, "rho")?;
+        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let dim = self.dim();
         let expected_sigma = npoints * (dim.sigma as usize);
-        if input.sigma.len() != expected_sigma {
+        if sigma.len() != expected_sigma {
             return Err(LibXCError::ComputeError(format!(
                 "sigma: expected size {expected_sigma}, got {}",
-                input.sigma.len()
+                sigma.len()
             )));
         }
 
@@ -368,8 +371,8 @@ impl LibXCFunctional {
             ffi::xc_gga(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
-                input.sigma.as_ptr(),
+                rho.as_ptr(),
+                sigma.as_ptr(),
                 zk_ptr,
                 vrho_ptr,
                 vsigma_ptr,
@@ -395,32 +398,33 @@ impl LibXCFunctional {
     /// Compute MGGA functional with automatic allocation.
     pub fn compute_mgga(
         &self,
-        input: &LibXCMggaInput,
+        input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
         let flags = flags.into();
         self.validate_flags(flags)?;
+        let rho = require_input(input, "rho")?;
+        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
 
         let expected_sigma = npoints * (dim.sigma as usize);
-        if input.sigma.len() != expected_sigma {
+        if sigma.len() != expected_sigma {
             return Err(LibXCError::ComputeError(format!(
                 "sigma: expected size {expected_sigma}, got {}",
-                input.sigma.len()
+                sigma.len()
             )));
         }
 
-        // Validate lapl/tau inputs
-        let lapl_ptr = match (&input.lapl, needs_lapl) {
+        let lapl_ptr = match (input.get("lapl").copied(), needs_lapl) {
             (Some(l), true) => {
                 let expected = npoints * (dim.lapl as usize);
                 if l.len() != expected {
@@ -437,7 +441,7 @@ impl LibXCFunctional {
             (_, false) => std::ptr::null(),
         };
 
-        let tau_ptr = match (&input.tau, needs_tau) {
+        let tau_ptr = match (input.get("tau").copied(), needs_tau) {
             (Some(t), true) => {
                 let expected = npoints * (dim.tau as usize);
                 if t.len() != expected {
@@ -471,8 +475,8 @@ impl LibXCFunctional {
             ffi::xc_mgga(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
-                input.sigma.as_ptr(),
+                rho.as_ptr(),
+                sigma.as_ptr(),
                 lapl_ptr,
                 tau_ptr,
                 ptr_for("zk"),
@@ -554,29 +558,31 @@ impl LibXCFunctional {
     #[allow(clippy::too_many_arguments)]
     pub fn compute_mgga_with_output(
         &self,
-        input: &LibXCMggaInput,
+        input: &LibXCCpuInput,
         output: &mut LibXCMggaOutputMut,
     ) -> Result<(), LibXCError> {
+        let rho = require_input(input, "rho")?;
+        let sigma = require_input(input, "sigma")?;
         let nspin = self.spin() as usize;
-        if input.rho.len() % nspin != 0 {
+        if rho.len() % nspin != 0 {
             return Err(LibXCError::ComputeError(
                 "rho input has invalid shape: size not divisible by nspin".into(),
             ));
         }
-        let npoints = input.rho.len() / nspin;
+        let npoints = rho.len() / nspin;
         let dim = self.dim();
         let needs_lapl = self.needs_laplacian();
         let needs_tau = self.needs_tau();
 
         let expected_sigma = npoints * (dim.sigma as usize);
-        if input.sigma.len() != expected_sigma {
+        if sigma.len() != expected_sigma {
             return Err(LibXCError::ComputeError(format!(
                 "sigma: expected size {expected_sigma}, got {}",
-                input.sigma.len()
+                sigma.len()
             )));
         }
 
-        let lapl_ptr = match (&input.lapl, needs_lapl) {
+        let lapl_ptr = match (input.get("lapl").copied(), needs_lapl) {
             (Some(l), true) => {
                 let expected = npoints * (dim.lapl as usize);
                 if l.len() != expected {
@@ -593,7 +599,7 @@ impl LibXCFunctional {
             (_, false) => std::ptr::null(),
         };
 
-        let tau_ptr = match (&input.tau, needs_tau) {
+        let tau_ptr = match (input.get("tau").copied(), needs_tau) {
             (Some(t), true) => {
                 let expected = npoints * (dim.tau as usize);
                 if t.len() != expected {
@@ -744,8 +750,8 @@ impl LibXCFunctional {
             ffi::xc_mgga(
                 self.ptr,
                 npoints,
-                input.rho.as_ptr(),
-                input.sigma.as_ptr(),
+                rho.as_ptr(),
+                sigma.as_ptr(),
                 lapl_ptr,
                 tau_ptr,
                 zk_ptr,
