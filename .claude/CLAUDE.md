@@ -75,3 +75,7 @@ We will save libxc headers in folder `libxc-ffi/headers`.
 - `versioning_xc.md` contains the detailed changes of libxc API for each version. This file is structured and maintained by human developer. Use `## Introduced in v<version>` to check what functions are introduced in each version (and can used for script to parse).
 
 To generate the FFI bindings, use python scripts in `libxc-ffi/scripts`, with help of tree-sitter and bindgen. **The FFI bindgen must be generated automatically, without manual modification.** Exception is `ffi_dynamic/mod.rs`, which can be manually modified.
+
+## File structure and code architecture of this project
+
+Please refer to `ARCHITECTURE.md` at the root of this repository for the detailed architecture. This document also contains some general rules that summarized by AI code agent.
