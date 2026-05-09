@@ -61,9 +61,9 @@ fn conditional_input_ptr(
             }
             Ok(slice.as_ptr())
         },
-        (None, true) => Err(LibXCError::ComputeError(format!(
-            "{key}: required input not provided"
-        ))),
+        (None, true) => {
+            Err(LibXCError::ComputeError(format!("{key}: required input not provided")))
+        },
         (_, false) => Ok(std::ptr::null()),
     }
 }
@@ -74,8 +74,9 @@ fn conditional_input_ptr(
 
 /// Unified output map for all functional families (preallocated buffers).
 ///
-/// Keys are derivative component names (e.g. `"zk"`, `"vrho"`, `"v2rho2"`, ...).
-/// Key present = user provides that buffer; absent = null pointer passed to libxc.
+/// Keys are derivative component names (e.g. `"zk"`, `"vrho"`, `"v2rho2"`,
+/// ...). Key present = user provides that buffer; absent = null pointer passed
+/// to libxc.
 pub type LibXCCpuOutputMut<'a> = HashMap<&'static str, &'a mut [f64]>;
 
 /// Validate an output slice from the map and return a mutable pointer.
