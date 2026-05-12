@@ -22,7 +22,8 @@ strum = { version = "0.28" }
 cudarc = { version = "0.19", optional = true }
 
 [dev-dependencies]
-itertools = { version = "0.14" }
+toml = { version = "1.1" }
+rayon = { version = "1.12" }
 
 [features]
 default = ["api-v7_0", "dynamic_loading"]

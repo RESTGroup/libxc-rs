@@ -1,7 +1,6 @@
 //! Example density data for Li atom, translated from
 //! pylibxc/example_densities.py.
 
-use itertools::izip;
 use libxc::prelude::*;
 use std::collections::HashMap;
 
@@ -85,7 +84,7 @@ const LI_DATA: [[f64; 9]; 7] = [
     ],
 ];
 
-pub fn test_input(data: &[[f64; 9]], spin: LibXCSpin) -> HashMap<&str, Vec<f64>> {
+pub fn test_input(data: &[[f64; 9]], spin: LibXCSpin) -> HashMap<String, Vec<f64>> {
     const RHO_A: usize = 0;
     const RHO_B: usize = 1;
     const SIGMA_AA: usize = 2;
@@ -99,36 +98,33 @@ pub fn test_input(data: &[[f64; 9]], spin: LibXCSpin) -> HashMap<&str, Vec<f64>>
     let mut result = HashMap::new();
     match spin {
         LibXCSpin::Unpolarized => {
-            let rho = izip!(data[RHO_A], data[RHO_B]).map(|(a, b)| a + b).collect();
-            let sigma = izip!(data[SIGMA_AA], data[SIGMA_AB], data[SIGMA_BB])
-                .map(|(aa, ab, bb)| aa + 2.0 * ab + bb)
-                .collect();
-            let lapl = izip!(data[LAPL_A], data[LAPL_B]).map(|(a, b)| a + b).collect();
-            let tau = izip!(data[TAU_A], data[TAU_B]).map(|(a, b)| a + b).collect();
-            result.insert("rho", rho);
-            result.insert("sigma", sigma);
-            result.insert("lapl", lapl);
-            result.insert("tau", tau);
+            let rho = data.iter().map(|r| r[RHO_A] + r[RHO_B]).collect();
+            let sigma =
+                data.iter().map(|r| r[SIGMA_AA] + 2.0 * r[SIGMA_AB] + r[SIGMA_BB]).collect();
+            let lapl = data.iter().map(|r| r[LAPL_A] + r[LAPL_B]).collect();
+            let tau = data.iter().map(|r| r[TAU_A] + r[TAU_B]).collect();
+            result.insert("rho".to_string(), rho);
+            result.insert("sigma".to_string(), sigma);
+            result.insert("lapl".to_string(), lapl);
+            result.insert("tau".to_string(), tau);
             result
         },
         LibXCSpin::Polarized => {
             // [data[RHO_A][0], data[RHO_B][0], data[RHO_A][1], data[RHO_B][1], ...]
-            let rho = izip!(data[RHO_A], data[RHO_B]).flat_map(|(a, b)| [a, b]).collect();
-            let sigma = izip!(data[SIGMA_AA], data[SIGMA_AB], data[SIGMA_BB])
-                .flat_map(|(aa, ab, bb)| [aa, ab, bb])
-                .collect();
-            let lapl = izip!(data[LAPL_A], data[LAPL_B]).flat_map(|(a, b)| [a, b]).collect();
-            let tau = izip!(data[TAU_A], data[TAU_B]).flat_map(|(a, b)| [a, b]).collect();
-            result.insert("rho", rho);
-            result.insert("sigma", sigma);
-            result.insert("lapl", lapl);
-            result.insert("tau", tau);
+            let rho = data.iter().flat_map(|r| [r[RHO_A], r[RHO_B]]).collect();
+            let sigma = data.iter().flat_map(|r| [r[SIGMA_AA], r[SIGMA_AB], r[SIGMA_BB]]).collect();
+            let lapl = data.iter().flat_map(|r| [r[LAPL_A], r[LAPL_B]]).collect();
+            let tau = data.iter().flat_map(|r| [r[TAU_A], r[TAU_B]]).collect();
+            result.insert("rho".to_string(), rho);
+            result.insert("sigma".to_string(), sigma);
+            result.insert("lapl".to_string(), lapl);
+            result.insert("tau".to_string(), tau);
             result
         },
     }
 }
 
-pub fn test_data(species: &str, spin: LibXCSpin) -> HashMap<&str, Vec<f64>> {
+pub fn test_data(species: &str, spin: LibXCSpin) -> HashMap<String, Vec<f64>> {
     match species {
         "Li" => test_input(&LI_DATA, spin),
         _ => panic!("Unknown species: {species}"),
