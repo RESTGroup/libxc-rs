@@ -10,15 +10,12 @@ use crate::prelude::*;
 /// - GGA: `"rho"`, `"sigma"`
 /// - MGGA: `"rho"`, `"sigma"`; `"lapl"` and `"tau"` if the functional needs
 ///   them
-pub type LibXCCpuInput<'a> = HashMap<&'static str, &'a [f64]>;
+pub type LibXCCpuInput<'a> = HashMap<String, &'a [f64]>;
 
 /// Extract a required input slice from the map.
-fn require_input<'a>(
-    input: &LibXCCpuInput<'a>,
-    key: &'static str,
-) -> Result<&'a [f64], LibXCError> {
+fn require_input<'a>(input: &LibXCCpuInput<'a>, key: &str) -> Result<&'a [f64], LibXCError> {
     input
-        .get(&key)
+        .get(key)
         .map(|s| *s)
         .ok_or_else(|| LibXCError::ComputeError(format!("{key}: required input not provided")))
 }
@@ -77,13 +74,13 @@ fn conditional_input_ptr(
 /// Keys are derivative component names (e.g. `"zk"`, `"vrho"`, `"v2rho2"`,
 /// ...). Key present = user provides that buffer; absent = null pointer passed
 /// to libxc.
-pub type LibXCCpuOutputMut<'a> = HashMap<&'static str, &'a mut [f64]>;
+pub type LibXCCpuOutputMut<'a> = HashMap<String, &'a mut [f64]>;
 
 /// Validate an output slice from the map and return a mutable pointer.
 /// Returns null if the key is absent; validates size if present.
 fn validate_output_ptr(
     output: &LibXCCpuOutputMut,
-    key: &'static str,
+    key: &str,
     npoints: usize,
     expected_dim: i32,
 ) -> Result<*mut f64, LibXCError> {
@@ -677,9 +674,9 @@ impl LibXCFunctional {
             LDA | HybLDA => self.compute_lda(input, flags),
             GGA | HybGGA => self.compute_gga(input, flags),
             MGGA | HybMGGA => self.compute_mgga(input, flags),
-            OEP | LCA => Err(LibXCError::ComputeError(
-                "compute_xc: OEP/LCA family is not supported".into(),
-            )),
+            OEP | LCA => {
+                Err(LibXCError::ComputeError("compute_xc: OEP/LCA family is not supported".into()))
+            },
         }
     }
 
@@ -696,9 +693,9 @@ impl LibXCFunctional {
             LDA | HybLDA => self.compute_lda_with_unsliced_output(input, output, deriv_flags),
             GGA | HybGGA => self.compute_gga_with_unsliced_output(input, output, deriv_flags),
             MGGA | HybMGGA => self.compute_mgga_with_unsliced_output(input, output, deriv_flags),
-            OEP | LCA => Err(LibXCError::ComputeError(
-                "compute_xc: OEP/LCA family is not supported".into(),
-            )),
+            OEP | LCA => {
+                Err(LibXCError::ComputeError("compute_xc: OEP/LCA family is not supported".into()))
+            },
         }
     }
 
@@ -714,9 +711,9 @@ impl LibXCFunctional {
             LDA | HybLDA => self.compute_lda_with_output(input, output),
             GGA | HybGGA => self.compute_gga_with_output(input, output),
             MGGA | HybMGGA => self.compute_mgga_with_output(input, output),
-            OEP | LCA => Err(LibXCError::ComputeError(
-                "compute_xc: OEP/LCA family is not supported".into(),
-            )),
+            OEP | LCA => {
+                Err(LibXCError::ComputeError("compute_xc: OEP/LCA family is not supported".into()))
+            },
         }
     }
 }

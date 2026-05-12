@@ -163,7 +163,7 @@ fn test_ext_params_wrong_length() {
 fn run_lda_compute_test(spin: LibXCSpin) {
     let ndim = size_tuple(spin);
     let rho: Vec<f64> = pseudo_random(42, COMPUTE_TEST_DIM * ndim.0);
-    let input = HashMap::from([("rho", rho.as_slice())]);
+    let input = HashMap::from([("rho".to_string(), rho.as_slice())]);
 
     let func = LibXCFunctional::from_identifier("lda_c_vwn", spin);
 
@@ -322,7 +322,10 @@ fn run_gga_compute_test(spin: LibXCSpin) {
     let ndim = size_tuple(spin);
     let rho: Vec<f64> = pseudo_random(43, COMPUTE_TEST_DIM * ndim.0);
     let sigma: Vec<f64> = pseudo_random(44, COMPUTE_TEST_DIM * ndim.1);
-    let input = HashMap::from([("rho", rho.as_slice()), ("sigma", sigma.as_slice())]);
+    let input = HashMap::from([
+        ("rho".to_string(), rho.as_slice()),
+        ("sigma".to_string(), sigma.as_slice()),
+    ]);
 
     let func = LibXCFunctional::from_identifier("gga_c_pbe", spin);
 
@@ -463,9 +466,9 @@ fn run_mgga_compute_test(spin: LibXCSpin) {
     let sigma: Vec<f64> = pseudo_random(46, COMPUTE_TEST_DIM * ndim.1);
     let tau: Vec<f64> = pseudo_random(47, COMPUTE_TEST_DIM * ndim.3);
     let input = HashMap::from([
-        ("rho", rho.as_slice()),
-        ("sigma", sigma.as_slice()),
-        ("tau", tau.as_slice()),
+        ("rho".to_string(), rho.as_slice()),
+        ("sigma".to_string(), sigma.as_slice()),
+        ("tau".to_string(), tau.as_slice()),
     ]);
 
     let func = LibXCFunctional::from_identifier("mgga_c_tpss", spin);
@@ -537,10 +540,10 @@ fn run_mgga_lapl_compute_test(spin: LibXCSpin) {
     let func = LibXCFunctional::from_identifier("mgga_x_br89", spin);
 
     let input = HashMap::from([
-        ("rho", rho.as_slice()),
-        ("sigma", sigma.as_slice()),
-        ("tau", tau.as_slice()),
-        ("lapl", lapl.as_slice()),
+        ("rho".to_string(), rho.as_slice()),
+        ("sigma".to_string(), sigma.as_slice()),
+        ("tau".to_string(), tau.as_slice()),
+        ("lapl".to_string(), lapl.as_slice()),
     ]);
 
     let flags_ev = LibXCDerivativeFlags {
@@ -586,9 +589,9 @@ fn run_mgga_lapl_compute_test(spin: LibXCSpin) {
 
     // Missing "lapl" input should fail for a functional that needs laplacian
     let input_no_lapl = HashMap::from([
-        ("rho", rho.as_slice()),
-        ("sigma", sigma.as_slice()),
-        ("tau", tau.as_slice()),
+        ("rho".to_string(), rho.as_slice()),
+        ("sigma".to_string(), sigma.as_slice()),
+        ("tau".to_string(), tau.as_slice()),
     ]);
     assert!(func.compute_xc(&input_no_lapl, flags_ev).is_err());
 }
@@ -615,10 +618,10 @@ fn test_deriv_flags_rejects_unsupported() {
     let tau: Vec<f64> = vec![0.1; 5];
     let lapl: Vec<f64> = vec![0.1; 5];
     let input = HashMap::from([
-        ("rho", rho.as_slice()),
-        ("sigma", sigma.as_slice()),
-        ("tau", tau.as_slice()),
-        ("lapl", lapl.as_slice()),
+        ("rho".to_string(), rho.as_slice()),
+        ("sigma".to_string(), sigma.as_slice()),
+        ("tau".to_string(), tau.as_slice()),
+        ("lapl".to_string(), lapl.as_slice()),
     ]);
 
     // mgga_c_tpss: if it doesn't have fxc, requesting it should fail
