@@ -24,6 +24,7 @@ cudarc = { version = "0.19", optional = true }
 [dev-dependencies]
 toml = { version = "1.1" }
 rayon = { version = "1.12" }
+cached = { version = "0.59" }
 
 [features]
 default = ["api-v7_0", "dynamic_loading"]

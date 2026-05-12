@@ -1,8 +1,7 @@
+use super::example_densities;
 use libxc::prelude::{libxc_enum_items::*, *};
 use rayon::prelude::*;
 use std::collections::HashMap;
-
-use crate::example_densities;
 
 lazy_static::lazy_static! {
     static ref REF: Vec<((String, String, String), HashMap<String, Vec<f64>>)> = {
@@ -12,7 +11,7 @@ lazy_static::lazy_static! {
         // zk = [-6.155181882468815e-02, -4.534982135558897e-02]
         // vrho = [-1.150256867650166e-01, -1.148983776346154e-01]
         // vsigma = [4.344359952306926e-05, 8.688719904613852e-05]
-        // (category, xc_name, species) -> {zk, vrho, vsigma}
+        // (category, xc_name, species) -> {zk, vrho, vsigma, vtau, vlapl}
         let mut m = Vec::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/regression/reference.toml");
         let content = std::fs::read_to_string(path).expect("Failed to read reference.toml");
@@ -44,7 +43,7 @@ fn test_regression_entry(
     reference: &HashMap<String, Vec<f64>>,
 ) {
     let spin = if species.contains("restr") { Unpolarized } else { Polarized };
-    let input = example_densities::test_data(species, spin);
+    let input = example_densities::test_data(species.to_string(), spin);
     let input_ref = input.iter().map(|(k, v)| (k.clone(), v.as_slice())).collect();
     let xc_identifier = category.to_owned() + "_" + xc_name;
     let xc = LibXCFunctional::from_identifier(&xc_identifier, spin);
