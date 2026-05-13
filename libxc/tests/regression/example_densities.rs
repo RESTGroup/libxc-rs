@@ -52,7 +52,14 @@ pub fn test_data(species: String, spin: LibXCSpin) -> HashMap<String, Vec<f64>> 
         .join("tests/regression/example_densities.toml");
     let content = std::fs::read_to_string(path).expect("Failed to read example_densities.toml");
     let data: HashMap<String, Vec<f64>> = toml::from_str(&content).unwrap();
+    // Strip "_restr" suffix: restricted species use the same raw density as
+    // their unrestricted counterpart, only the spin channel differs.
+    let lookup_key = if let Some(base) = species.strip_suffix("_restr") {
+        base.to_string()
+    } else {
+        species.clone()
+    };
     let data_folded: Vec<[f64; 9]> =
-        data[&species].chunks(9).map(|chunk| chunk.try_into().unwrap()).collect();
+        data[&lookup_key].chunks(9).map(|chunk| chunk.try_into().unwrap()).collect();
     test_input(&data_folded, spin)
 }
