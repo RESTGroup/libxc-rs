@@ -694,9 +694,8 @@ impl LibXCFunctional {
     /// # Output keys
     ///
     /// Output keys can be complicated for GGA and MGGA functionals. Please
-    /// refer to the module documentation
-    /// [layout_handling](crate::layout_handling) for details on the naming
-    /// convention and how to interpret them.
+    /// refer to the source code in [layout_handling](crate::layout_handling)
+    /// for details on the naming convention and how to interpret them.
     ///
     /// | Level | LDA components | GGA adds | MGGA adds |
     /// |-------|---------------|----------|-----------|
@@ -717,7 +716,7 @@ impl LibXCFunctional {
     ///
     /// Note `rho`, `tau` and `lapl` has two spin components (alpha or ↑, and
     /// beta or ↓), but `sigma` only has three (↑↑, ↑↓, and ↓↓). The output
-    /// components is complicated and refer to module docuemnt
+    /// components is complicated and refer to source code of module
     /// [layout_handling](crate::layout_handling) for details.
     ///
     /// # Errors
