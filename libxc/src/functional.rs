@@ -25,9 +25,101 @@ pub struct LibXCReference {
     pub key: String,
 }
 
-/// A safe wrapper around a libxc `xc_func_type` pointer.
+/// Safe, owning wrapper around a libxc `xc_func_type` functional.
 ///
-/// Owns the underlying C resource and frees it on `Drop`.
+/// `LibXCFunctional` is the central type of this crate. It represents a single
+/// DFT exchange-correlation functional (e.g. LDA, GGA, MGGA, or a hybrid
+/// variant) together with its spin polarization state, and exposes three
+/// categories of operations:
+///
+/// # Construction
+///
+/// Create a functional by name or numeric ID, specifying spin:
+/// - [`from_identifier`](Self::from_identifier) /
+///   [`from_identifier_f`](Self::from_identifier_f) — from a string like
+///   `"gga_c_pbe"`.
+/// - [`from_number`](Self::from_number) /
+///   [`from_number_f`](Self::from_number_f) — from a libxc functional ID (e.g.
+///   `130`).
+/// - The `_f` suffix marks fallible variants that return `Result`.
+///
+/// # Introspection
+///
+/// Query static properties of the functional:
+/// - **Identity**: [`identifier`](Self::identifier), [`number`](Self::number),
+///   [`info_name`](Self::info_name).
+/// - **Classification**: [`family`](Self::family) (LDA/GGA/MGGA/hybrid),
+///   [`kind`](Self::kind) (exchange/correlation/etc.), [`spin`](Self::spin).
+/// - **Capabilities**: [`has_exc`](Self::has_exc), [`has_vxc`](Self::has_vxc),
+///   [`has_fxc`](Self::has_fxc), [`has_kxc`](Self::has_kxc),
+///   [`has_lxc`](Self::has_lxc), [`needs_laplacian`](Self::needs_laplacian),
+///   [`needs_tau`](Self::needs_tau), [`flags`](Self::flags).
+/// - **Hybrid / range-separated / VV10**: [`hyb_exx_coef`](Self::hyb_exx_coef),
+///   [`cam_coef`](Self::cam_coef), [`vv10_coef`](Self::vv10_coef),
+///   [`is_hyb_cam`](Self::is_hyb_cam).
+/// - **Composition**: [`aux_funcs`](Self::aux_funcs) lists component
+///   functionals and their weights (e.g. B3LYP = 0.08·LDA-X + 0.72·B88 + …).
+/// - **References**: [`references`](Self::references) returns literature
+///   citations; [`describe`](Self::describe) prints a human-readable summary.
+///
+/// # Parameter tuning
+///
+/// - **External parameters**: [`ext_param_values`](Self::ext_param_values),
+///   [`set_ext_params`](Self::set_ext_params),
+///   [`set_ext_param_map`](Self::set_ext_param_map) — modify functional
+///   parameters (e.g. range-separation ω in ωB97X-V).
+/// - **Hybrid / range-separated / VV10 setters** (not in pylibxc):
+///   [`set_hyb_exx_coef`](Self::set_hyb_exx_coef),
+///   [`set_cam_coef`](Self::set_cam_coef),
+///   [`set_vv10_coef`](Self::set_vv10_coef) — override the default mixing
+///   coefficients for hybrid functionals.
+/// - **Numerical thresholds**:
+///   [`set_dens_threshold`](Self::set_dens_threshold),
+///   [`set_zeta_threshold`](Self::set_zeta_threshold),
+///   [`set_sigma_threshold`](Self::set_sigma_threshold),
+///   [`set_tau_threshold`](Self::set_tau_threshold).
+///
+/// # Computation
+///
+/// Evaluate the functional and its derivatives on a grid (CPU, or CUDA with
+/// the `cuda` feature):
+/// - [`compute_xc`] — automatic allocation, returns `(Vec<f64>, layout)`.
+/// - [`compute_xc_with_unsliced_output`] — preallocated contiguous buffer.
+/// - [`compute_xc_with_output`] — named per-component output buffers.
+///
+/// Input is a `HashMap<String, &\[f64\]>` with keys `"rho"`, `"sigma"`,
+/// `"lapl"`, `"tau"` depending on the family. Output is accessed via
+/// [`LibXCOutputLayout`] which maps component names (e.g. `"zk"`, `"vrho"`,
+/// `"vsigma"`) to ranges in the buffer.
+///
+/// # Example
+///
+/// ```rust
+/// use libxc::prelude::*;
+/// use libxc_enum_items::*;
+/// use std::collections::HashMap;
+///
+/// // Create a GGA correlation functional (unpolarized)
+/// let func = LibXCFunctional::from_identifier("gga_c_pbe", Unpolarized);
+/// assert_eq!(func.family(), LibXCFamily::GGA);
+///
+/// // Prepare input: 3 grid points
+/// let rho: Vec<f64>   = vec![0.1, 0.2, 0.3];
+/// let sigma: Vec<f64> = vec![0.01, 0.02, 0.03];
+/// let mut input = HashMap::new();
+/// input.insert("rho".into(), rho.as_slice());
+/// input.insert("sigma".into(), sigma.as_slice());
+///
+/// // Compute energy (zk) and first derivative (vrho, vsigma)
+/// let (buf, layout) = func.compute_xc(&input, 1).unwrap();
+/// let zk = &buf[layout.get("zk").unwrap()];
+/// let vrho = &buf[layout.get("vrho").unwrap()];
+/// ```
+///
+/// [`compute_xc`]: Self::compute_xc
+/// [`compute_xc_with_unsliced_output`]: Self::compute_xc_with_unsliced_output
+/// [`compute_xc_with_output`]: Self::compute_xc_with_output
+/// [`LibXCOutputLayout`]: crate::layout_handling::LibXCOutputLayout
 pub struct LibXCFunctional {
     pub(crate) ptr: *mut ffi::xc_func_type,
 }

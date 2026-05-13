@@ -1,3 +1,25 @@
+//! Safe Rust wrapper for [libxc](https://www.tddft.org/programs/libxc/), the library
+//! of exchange-correlation functionals for density-functional theory (DFT).
+//!
+//! # Overview
+//!
+//! This crate provides [`LibXCFunctional`], the central type that represents a
+//! single DFT exchange-correlation functional. It wraps the C `xc_func_type`
+//! pointer, manages its lifetime, and exposes three categories of operations:
+//!
+//! - **Construction** — create a functional by name or ID, with spin polarization:
+//!   [`from_identifier`](LibXCFunctional::from_identifier),
+//!   [`from_number`](LibXCFunctional::from_number) (plus `_f` fallible variants).
+//!
+//! - **Introspection** — query identity, family (LDA/GGA/MGGA/hybrid), kind,
+//!   capability flags, hybrid/CAM/VV10 coefficients, auxiliary functionals, and
+//!   literature references.
+//!
+//! - **Computation** — evaluate the functional and its derivatives (up to 4th
+//!   order) on a grid via [`compute_xc`](LibXCFunctional::compute_xc) and
+//!   variants.
+#[doc = include_str!("../readme.md")]
+
 pub mod enums;
 pub mod error;
 pub mod functional;
@@ -22,3 +44,7 @@ pub mod prelude {
     pub(crate) use libxc_ffi::ffi;
     pub(crate) use std::collections::HashMap;
 }
+
+// documentation exception
+#[allow(unused)]
+use prelude::*;
