@@ -659,11 +659,137 @@ impl LibXCFunctional {
 
     // -- Unified dispatch ---------------------------------------------------
 
-    /// Compute functional with automatic allocation, dispatching by family.
+    /// Compute the functional with automatic allocation, dispatching by family.
     ///
-    /// Inspects `self.family()` and delegates to `compute_lda`, `compute_gga`,
-    /// or `compute_mgga` accordingly. Hybrid families (HybLDA, HybGGA, HybMGGA)
-    /// are dispatched to their base family's compute.
+    /// Inspects `self.family()` and delegates to
+    /// [`compute_lda`](Self::compute_lda),
+    /// [`compute_gga`](Self::compute_gga), or
+    /// [`compute_mgga`](Self::compute_mgga) accordingly. Hybrid families
+    /// (HybLDA, HybGGA, HybMGGA) are dispatched to their base family's
+    /// compute.
+    ///
+    /// Returns `(buffer, layout)` where `buffer` is a contiguous `Vec<f64>` and
+    /// `layout` describes how to index named components (e.g. `"zk"`, `"vrho"`)
+    /// within it. Use [`LibXCOutputLayout::get`] to extract a `Range<usize>`
+    /// for each component.
+    ///
+    /// The `flags` parameter controls which derivative levels to compute:
+    /// - `0`: energy only (EXC)
+    /// - `1`: energy + first derivative (EXC + VXC)
+    /// - `2`: up to second derivative (EXC + VXC + FXC)
+    /// - `3`: up to third derivative (EXC + VXC + FXC + KXC)
+    /// - `4`: up to fourth derivative (EXC + VXC + FXC + KXC + LXC)
+    ///
+    /// You can also pass a [`LibXCDerivativeFlags`] struct for fine-grained
+    /// control over individual derivative levels.
+    ///
+    /// # Input keys
+    ///
+    /// | Family | Required keys |
+    /// |--------|--------------|
+    /// | LDA    | `"rho"` |
+    /// | GGA    | `"rho"`, `"sigma"` |
+    /// | MGGA   | `"rho"`, `"sigma"`, `"tau"` (and `"lapl"` if the functional needs it) |
+    ///
+    /// Input arrays use row-major order `[n_comp, npoints]` with the last
+    /// dimension contiguous. For unpolarized calculations, `"rho"` has shape
+    /// `[npoints]`; for polarized, `[2 * npoints]` (alpha then beta).
+    ///
+    /// # Output keys
+    ///
+    /// | Level | LDA components | GGA adds | MGGA adds |
+    /// |-------|---------------|----------|-----------|
+    /// | EXC   | `zk` | `zk` | `zk` |
+    /// | VXC   | `vrho` | `vrho`, `vsigma` | `vrho`, `vsigma`, `vlapl`, `vtau` |
+    /// | FXC   | `v2rho2` | `v2rho2`, `v2rhosigma`, `v2sigma2` | (10 components) |
+    /// | KXC   | `v3rho3` | (4 components) | (20 components) |
+    /// | LXC   | `v4rho4` | (5 components) | (35 components) |
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LibXCError::ComputeError`] if:
+    /// - A required input key is missing
+    /// - An input array has the wrong size
+    /// - A requested derivative level is not supported by the functional
+    ///
+    /// # Examples
+    ///
+    /// LDA exchange on 5 grid points (unpolarized, derivative level 1):
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("lda_x", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+    /// let input = HashMap::from([("rho".to_string(), rho.as_slice())]);
+    ///
+    /// let (buf, layout) = func.compute_xc(&input, 1).unwrap();
+    ///
+    /// // Extract the energy-per-particle (zk) array:
+    /// let zk = &buf[layout.get("zk").unwrap()]; // length = 5
+    /// assert!((zk[0] - (-0.3428)).abs() < 1e-3);
+    ///
+    /// // Extract the first derivative (vrho) array:
+    /// let vrho = &buf[layout.get("vrho").unwrap()]; // length = 5
+    /// assert!((vrho[0] - (-0.4571)).abs() < 1e-3);
+    /// ```
+    ///
+    /// GGA exchange (PBE) requires `"sigma"` in addition to `"rho"`:
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("gga_x_pbe", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3];
+    /// let sigma = vec![0.01, 0.02, 0.03];
+    /// let input = HashMap::from([
+    ///     ("rho".to_string(), rho.as_slice()),
+    ///     ("sigma".to_string(), sigma.as_slice()),
+    /// ]);
+    ///
+    /// let (buf, layout) = func.compute_xc(&input, 1).unwrap();
+    /// let zk = &buf[layout.get("zk").unwrap()];
+    /// let vrho = &buf[layout.get("vrho").unwrap()];
+    /// let vsigma = &buf[layout.get("vsigma").unwrap()];
+    /// ```
+    ///
+    /// MGGA correlation (TPSS) requires `"tau"` (and `"lapl"` if the functional
+    /// needs the laplacian):
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("mgga_c_tpss", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3];
+    /// let sigma = vec![0.01, 0.02, 0.03];
+    /// let tau = vec![0.05, 0.1, 0.15];
+    /// let input = HashMap::from([
+    ///     ("rho".to_string(), rho.as_slice()),
+    ///     ("sigma".to_string(), sigma.as_slice()),
+    ///     ("tau".to_string(), tau.as_slice()),
+    /// ]);
+    ///
+    /// let (buf, layout) = func.compute_xc(&input, 1).unwrap();
+    /// let vtau = &buf[layout.get("vtau").unwrap()];
+    /// ```
+    ///
+    /// Higher derivative levels include more output components:
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("lda_x", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3];
+    /// let input = HashMap::from([("rho".to_string(), rho.as_slice())]);
+    ///
+    /// // Level 2 = EXC + VXC + FXC
+    /// let (buf, layout) = func.compute_xc(&input, 2).unwrap();
+    /// let v2rho2 = &buf[layout.get("v2rho2").unwrap()];
+    /// ```
     pub fn compute_xc(
         &self,
         input: &LibXCCpuInput,
@@ -680,8 +806,47 @@ impl LibXCFunctional {
         }
     }
 
-    /// Compute functional with preallocated output buffer slice, dispatching by
-    /// family.
+    /// Compute the functional into a user-provided contiguous buffer,
+    /// dispatching by family.
+    ///
+    /// This is the preallocated variant of [`compute_xc`](Self::compute_xc):
+    /// instead of allocating a new `Vec<f64>`, the caller provides a `&mut
+    /// [f64]` buffer. The buffer must be at least `layout.total_size`
+    /// elements long, where `layout` can be obtained from
+    /// [`output_layout`](Self::output_layout).
+    ///
+    /// Returns the [`LibXCOutputLayout`] that describes how to index named
+    /// components within the buffer. Unused trailing elements (if the buffer is
+    /// larger than `total_size`) are left unchanged.
+    ///
+    /// This variant is useful when you want to reuse the same buffer across
+    /// multiple evaluations (e.g. in a SCF loop) to avoid repeated allocations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LibXCError::ComputeError`] if the buffer is too small or if
+    /// any input validation fails (same conditions as
+    /// [`compute_xc`](Self::compute_xc)).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("lda_x", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+    /// let input = HashMap::from([("rho".to_string(), rho.as_slice())]);
+    ///
+    /// // Get the layout to know the required buffer size
+    /// let layout = func.output_layout(5, 1);
+    /// let mut buf = vec![0.0f64; layout.total_size];
+    ///
+    /// let layout = func.compute_xc_with_unsliced_output(&input, &mut buf, 1).unwrap();
+    ///
+    /// let zk = &buf[layout.get("zk").unwrap()];
+    /// assert!((zk[0] - (-0.3428)).abs() < 1e-3);
+    /// ```
     pub fn compute_xc_with_unsliced_output(
         &self,
         input: &LibXCCpuInput,
@@ -699,8 +864,82 @@ impl LibXCFunctional {
         }
     }
 
-    /// Compute functional with user-preallocated output buffers, dispatching by
-    /// family.
+    /// Compute the functional into named user-provided output buffers,
+    /// dispatching by family.
+    ///
+    /// This is the most explicit compute variant: the caller provides a
+    /// [`LibXCCpuOutputMut`] (a `HashMap<String, &mut [f64]>`) whose keys are
+    /// the output component names (e.g. `"zk"`, `"vrho"`, `"vsigma"`). Only the
+    /// components present in the map are computed; absent keys are passed as
+    /// null pointers to libxc.
+    ///
+    /// Unlike [`compute_xc`](Self::compute_xc) and
+    /// [`compute_xc_with_unsliced_output`](Self::compute_xc_with_unsliced_output),
+    /// this method does **not** take a `deriv_flags` parameter — the derivative
+    /// level is implicitly determined by which output keys you provide.
+    ///
+    /// Each output buffer must have the correct size: `npoints * n_comp`, where
+    /// `n_comp` depends on the component and spin polarization. For example,
+    /// for an unpolarized GGA functional on 5 grid points, `"vrho"` needs 5
+    /// elements and `"vsigma"` needs 5 elements; for a polarized GGA,
+    /// `"vrho"` needs 10 and `"vsigma"` needs 15.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LibXCError::ComputeError`] if any output buffer has the wrong
+    /// size or if any input validation fails.
+    ///
+    /// # Examples
+    ///
+    /// LDA exchange, requesting only `"zk"` and `"vrho"`:
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("lda_x", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+    /// let input = HashMap::from([("rho".to_string(), rho.as_slice())]);
+    ///
+    /// let mut zk = vec![0.0f64; 5];
+    /// let mut vrho = vec![0.0f64; 5];
+    /// let mut output = HashMap::new();
+    /// output.insert("zk".to_string(), zk.as_mut_slice());
+    /// output.insert("vrho".to_string(), vrho.as_mut_slice());
+    ///
+    /// func.compute_xc_with_output(&input, &mut output).unwrap();
+    ///
+    /// assert!((zk[0] - (-0.3428)).abs() < 1e-3);
+    /// assert!((vrho[0] - (-0.4571)).abs() < 1e-3);
+    /// ```
+    ///
+    /// GGA exchange (PBE), requesting `"zk"`, `"vrho"`, and `"vsigma"`:
+    ///
+    /// ```
+    /// use libxc::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// let func = LibXCFunctional::from_identifier("gga_x_pbe", LibXCSpin::Unpolarized);
+    /// let rho = vec![0.1, 0.2, 0.3, 0.4, 0.5];
+    /// let sigma = vec![0.01, 0.02, 0.03, 0.04, 0.05];
+    /// let input = HashMap::from([
+    ///     ("rho".to_string(), rho.as_slice()),
+    ///     ("sigma".to_string(), sigma.as_slice()),
+    /// ]);
+    ///
+    /// let mut zk = vec![0.0f64; 5];
+    /// let mut vrho = vec![0.0f64; 5];
+    /// let mut vsigma = vec![0.0f64; 5];
+    /// let mut output = HashMap::new();
+    /// output.insert("zk".to_string(), zk.as_mut_slice());
+    /// output.insert("vrho".to_string(), vrho.as_mut_slice());
+    /// output.insert("vsigma".to_string(), vsigma.as_mut_slice());
+    ///
+    /// func.compute_xc_with_output(&input, &mut output).unwrap();
+    ///
+    /// assert!((zk[0] - (-0.3516)).abs() < 1e-3);
+    /// assert!((vsigma[0] - (-0.0855)).abs() < 1e-3);
+    /// ```
     pub fn compute_xc_with_output(
         &self,
         input: &LibXCCpuInput,
