@@ -443,21 +443,91 @@ impl LibXCFunctional {
         let references = self.references();
 
         let mut lst = vec![
-            format!("ID Number      : {}", self.number()),
-            format!("Identifier     : {}", self.identifier()),
-            format!("Description    : {}", self.info_name()),
+            format!("ID Number       : {}", self.number()),
+            format!("Identifier      : {}", self.identifier()),
+            format!("Description     : {}", self.info_name()),
             "Attributes".to_string(),
-            format!("    Kind       : {:?}", self.kind()),
-            format!("    Family     : {:?}", self.family()),
-            format!("    Spin       : {:?}", self.spin()),
+            format!("    Kind        : {:?}", self.kind()),
+            format!("    Family      : {:?}", self.family()),
+            format!("    Spin        : {:?}", self.spin()),
             "Flags".to_string(),
-            format!("    Derivative : {}", self.flags() & flag_all_deriv),
-            format!("    Dimension  : {}", self.flags() & flag_all_dim),
-            format!("    CAM        : {}", self.flags() & flag_all_cam),
-            format!("    VV10       : {}", self.flags() & flag_vv10),
-            format!("    MGGA       : {}", self.flags() & flag_all_mgga),
-            format!("    Device     : {}", self.flags() & flag_all_device),
+            format!("    Derivative  : {}", self.flags() & flag_all_deriv),
+            format!("    Dimension   : {}", self.flags() & flag_all_dim),
+            format!("    CAM         : {}", self.flags() & flag_all_cam),
+            format!("    VV10        : {}", self.flags() & flag_vv10),
+            format!("    MGGA        : {}", self.flags() & flag_all_mgga),
+            format!("    Device      : {}", self.flags() & flag_all_device),
         ];
+        // generate a duplicate functional object for obtaining default values
+        let default_func = Self::from_number_f(self.number(), self.spin()).unwrap();
+        // hyb_exx_coef
+        if let Some(hyb_exx_coef) = self.hyb_exx_coef() {
+            let default_hyb_exx_coef = default_func.hyb_exx_coef().unwrap();
+            lst.push("Hybrid Functional (non-CAM-type)".to_string());
+            if hyb_exx_coef == default_hyb_exx_coef {
+                lst.push(format!("    hyb_exx_coef: {hyb_exx_coef}"));
+            } else {
+                lst.push(format!(
+                    "    hyb_exx_coef: {hyb_exx_coef} (default: {default_hyb_exx_coef})"
+                ));
+            }
+        }
+        // cam_coef
+        if let Some((cam_alpha, cam_beta, cam_omega)) = self.cam_coef() {
+            let (def_alpha, def_beta, def_omega) = default_func.cam_coef().unwrap();
+            lst.push("Hybrid Functional (CAM-type)".to_string());
+            if (cam_alpha, cam_beta, cam_omega) == (def_alpha, def_beta, def_omega) {
+                lst.push(format!("    cam_alpha   : {cam_alpha}"));
+                lst.push(format!("    cam_beta    : {cam_beta}"));
+                lst.push(format!("    cam_omega   : {cam_omega}"));
+            } else {
+                lst.push(format!("    cam_alpha   : {cam_alpha} (default: {def_alpha})"));
+                lst.push(format!("    cam_beta    : {cam_beta} (default: {def_beta})"));
+                lst.push(format!("    cam_omega   : {cam_omega} (default: {def_omega})"));
+            }
+        }
+        // vv10
+        if let Some((nlc_b, nlc_c)) = self.vv10_coef() {
+            let (def_nlc_b, def_nlc_c) = default_func.vv10_coef().unwrap();
+            lst.push("VV10 Functional".to_string());
+            if (nlc_b, nlc_c) == (def_nlc_b, def_nlc_c) {
+                lst.push(format!("    nlc_b       : {nlc_b}"));
+                lst.push(format!("    nlc_C       : {nlc_c}"));
+            } else {
+                lst.push(format!("    nlc_b       : {nlc_b} (default: {def_nlc_b})"));
+                lst.push(format!("    nlc_C       : {nlc_c} (default: {def_nlc_c})"));
+            }
+        }
+        // ext_params
+        let trim_float =
+            |s: f64| format!("{:20.15}", s).trim_end_matches('0').trim_end_matches('.').to_string();
+        let ext_param_number = self.n_ext_params();
+        if ext_param_number > 0 {
+            let ext_param_names = self.ext_param_names();
+            let ext_param_values = self.ext_param_values();
+            let ext_param_descriptions = self.ext_param_descriptions();
+            let ext_param_default = self.ext_param_default_values();
+            lst.push("External Parameters".to_string());
+            for i in 0..ext_param_number as usize {
+                if ext_param_values[i] == ext_param_default[i] {
+                    lst.push(format!(
+                        "    - {:>9} = {:<20} {}",
+                        ext_param_names[i],
+                        trim_float(ext_param_values[i]),
+                        ext_param_descriptions[i],
+                    ));
+                } else {
+                    lst.push(format!(
+                        "    - {:>9} = {:<20} {:<50} (default: {:<20})",
+                        ext_param_names[i],
+                        trim_float(ext_param_values[i]),
+                        ext_param_descriptions[i],
+                        trim_float(ext_param_default[i])
+                    ))
+                };
+            }
+        }
+        // references
         if !references.is_empty() {
             lst.push("References".to_string());
             for r in references {
@@ -643,11 +713,17 @@ impl LibXCFunctional {
     /// Panics if the length of `params` does not match the number of external
     /// parameters expected by this functional.
     pub fn set_ext_params(&mut self, params: &[f64]) {
+        self.set_ext_params_f(params).unwrap()
+    }
+
+    /// Set all external parameters at once (fallible).
+    pub fn set_ext_params_f(&mut self, params: &[f64]) -> Result<(), LibXCError> {
         let n = self.n_ext_params() as usize;
         assert_eq!(params.len(), n, "Expected {} external parameters, got {}", n, params.len());
         unsafe {
             ffi::xc_func_set_ext_params(self.ptr, params.as_ptr());
         }
+        Ok(())
     }
 
     /// Set external parameters using a map of parameter names to values.
@@ -694,12 +770,15 @@ impl LibXCFunctional {
         for (key, val) in param_map.into_iter() {
             let (key, val) = (key.as_ref(), *val.borrow());
             if !map.contains_key(key) {
-                return Err(LibXCError::NotFound(format!("external parameter '{key}' not found")));
+                return Err(LibXCError::ParamSetError {
+                    param_name: key.to_string(),
+                    details: format!("external parameter not found"),
+                });
             }
             map.insert(key.to_string(), val);
         }
         let params: Vec<f64> = map.values().cloned().collect();
-        self.set_ext_params(&params);
+        self.set_ext_params_f(&params)?;
         Ok(())
     }
 }

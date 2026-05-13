@@ -11,6 +11,8 @@ pub enum LibXCError {
     InitError { func_id: i32, spin: LibXCSpin },
     /// Error during computation (invalid input sizes, family mismatch, etc.).
     ComputeError(String),
+    /// Error related to parameter setting.
+    ParamSetError { param_name: String, details: String },
 }
 
 impl fmt::Display for LibXCError {
@@ -21,6 +23,9 @@ impl fmt::Display for LibXCError {
                 write!(f, "failed to initialize functional {func_id} with spin {spin:?}")
             },
             LibXCError::ComputeError(msg) => write!(f, "compute error: {msg}"),
+            LibXCError::ParamSetError { param_name, details } => {
+                write!(f, "parameter set error for {param_name}: {details}")
+            },
         }
     }
 }
