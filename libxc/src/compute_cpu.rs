@@ -689,13 +689,14 @@ impl LibXCFunctional {
     /// |--------|--------------|
     /// | LDA    | `"rho"` |
     /// | GGA    | `"rho"`, `"sigma"` |
-    /// | MGGA   | `"rho"`, `"sigma"`, `"tau"` (and `"lapl"` if the functional needs it) |
-    ///
-    /// Input arrays use row-major order `[n_comp, npoints]` with the last
-    /// dimension contiguous. For unpolarized calculations, `"rho"` has shape
-    /// `[npoints]`; for polarized, `[2 * npoints]` (alpha then beta).
+    /// | MGGA   | `"rho"`, `"sigma"`, `"tau"`<br>(and `"lapl"` if the functional needs it) |
     ///
     /// # Output keys
+    ///
+    /// Output keys can be complicated for GGA and MGGA functionals. Please
+    /// refer to the module documentation
+    /// [layout_handling](crate::layout_handling) for details on the naming
+    /// convention and how to interpret them.
     ///
     /// | Level | LDA components | GGA adds | MGGA adds |
     /// |-------|---------------|----------|-----------|
@@ -704,6 +705,20 @@ impl LibXCFunctional {
     /// | FXC   | `v2rho2` | `v2rho2`, `v2rhosigma`, `v2sigma2` | (10 components) |
     /// | KXC   | `v3rho3` | (4 components) | (20 components) |
     /// | LXC   | `v4rho4` | (5 components) | (35 components) |
+    ///
+    /// # Convention for polarization input/output arrays
+    ///
+    /// For polarized functionals, in a certain component, the input and output
+    /// arrays use row-major order `[n_points, n_spin]` and are then flattened
+    /// (the most contiguous dimension is spin).
+    ///
+    /// For example, the density input follows the order `rho[i * n_spin + s]`
+    /// where `i` is the grid point index and `s` is the spin index.
+    ///
+    /// Note `rho`, `tau` and `lapl` has two spin components (alpha or ↑, and
+    /// beta or ↓), but `sigma` only has three (↑↑, ↑↓, and ↓↓). The output
+    /// components is complicated and refer to module docuemnt
+    /// [layout_handling](crate::layout_handling) for details.
     ///
     /// # Errors
     ///

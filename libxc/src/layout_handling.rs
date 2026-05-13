@@ -46,7 +46,7 @@ impl From<usize> for LibXCDerivativeFlags {
 // -- Output label definitions (mirroring pylibxc output_labels) --------
 
 #[rustfmt::skip]
-pub(crate) const LDA_OUTPUT_LABELS: [&'static str; 5] = [
+pub const LDA_OUTPUT_LABELS: [&'static str; 5] = [
     "zk",                                                               // 1
     "vrho",                                                             // 1
     "v2rho2",                                                           // 1
@@ -60,7 +60,7 @@ const LDA_KXC_END: usize = 4;
 const LDA_LXC_END: usize = 5;
 
 #[rustfmt::skip]
-pub(crate) const GGA_OUTPUT_LABELS: [&'static str; 15] = [
+pub const GGA_OUTPUT_LABELS: [&'static str; 15] = [
     "zk",                                                               // 1
     "vrho", "vsigma",                                                   // 2
     "v2rho2", "v2rhosigma", "v2sigma2",                                 // 3
@@ -74,7 +74,7 @@ const GGA_KXC_END: usize = 10;
 const GGA_LXC_END: usize = 15;
 
 #[rustfmt::skip]
-pub(crate) const MGGA_OUTPUT_LABELS: [&'static str; 70] = [
+pub const MGGA_OUTPUT_LABELS: [&'static str; 70] = [
     "zk",                                                               // 1
     "vrho", "vsigma", "vlapl", "vtau",                                  // 4
     "v2rho2", "v2rhosigma", "v2rholapl", "v2rhotau", "v2sigma2",        // 10
@@ -101,7 +101,7 @@ const MGGA_KXC_END: usize = 35;
 const MGGA_LXC_END: usize = 70;
 
 /// Maps an output label name to its dimension value from `xc_dimensions`.
-pub(crate) fn get_dim(dim: &ffi::xc_dimensions, label: &str) -> i32 {
+pub fn get_dim(dim: &ffi::xc_dimensions, label: &str) -> i32 {
     match label {
         "zk" => dim.zk,
         "vrho" => dim.vrho,
