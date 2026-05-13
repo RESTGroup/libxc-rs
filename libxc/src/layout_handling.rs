@@ -1,3 +1,7 @@
+//! Defines the layout of output buffers for libxc computations, and utilities
+//! to compute them based on functional properties and requested derivative
+//! levels.
+
 use crate::prelude::*;
 
 /// Flags controlling which derivative levels to compute.

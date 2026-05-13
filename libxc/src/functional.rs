@@ -1,4 +1,11 @@
 //! Wrapper for libxc functionals (non-computation part).
+//!
+//! Corresponds to original libxc's `pylibxc.functional`.
+//!
+//! Note the computational part is separately implemented in `compute_cpu.rs`
+//! and `compute_cuda.rs`. Layout of output data structures is defined in
+//! `layout_handling.rs`, which will be shared by both CPU and CUDA
+//! implementations.
 
 use crate::prelude::*;
 

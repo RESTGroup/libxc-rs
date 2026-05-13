@@ -1,3 +1,5 @@
+//! Wrappers for libxc enums and bitflags.
+
 use libxc_ffi::ffi;
 
 /// Spin polarization of the functional.

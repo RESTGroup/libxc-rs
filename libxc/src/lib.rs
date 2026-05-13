@@ -1,6 +1,7 @@
 pub mod enums;
 pub mod error;
 pub mod functional;
+pub mod functional_specific;
 pub mod util;
 
 pub mod compute_cpu;
