@@ -26,6 +26,10 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# Regression test data (auto-generated, large; regenerate with gen_*.py)
+/libxc/tests/regression/reference.toml
+/libxc/tests/regression/example_densities.toml
+
 # Python scripts
 .ipynb_checkpoints/
 __pycache__/
