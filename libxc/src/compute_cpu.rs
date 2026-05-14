@@ -200,6 +200,12 @@ impl LibXCFunctional {
         input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_lda instead".into(),
+            ));
+        }
         let (npoints, rho_ptr, layout) = self.lda_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
         self.lda_call(npoints, rho_ptr, &mut buffer, &layout);
@@ -332,6 +338,12 @@ impl LibXCFunctional {
         input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_gga instead".into(),
+            ));
+        }
         let (npoints, rho_ptr, sigma_ptr, layout) = self.gga_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
         self.gga_call(npoints, rho_ptr, sigma_ptr, &mut buffer, &layout);
@@ -545,6 +557,12 @@ impl LibXCFunctional {
         input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_mgga instead".into(),
+            ));
+        }
         let (npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout) =
             self.mgga_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
@@ -810,6 +828,12 @@ impl LibXCFunctional {
         input: &LibXCCpuInput,
         flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<(Vec<f64>, LibXCOutputLayout), LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_xc instead".into(),
+            ));
+        }
         use crate::prelude::libxc_enum_items::*;
         match self.family() {
             LDA | HybLDA => self.compute_lda(input, flags),
@@ -868,6 +892,12 @@ impl LibXCFunctional {
         output: &mut [f64],
         deriv_flags: impl Into<LibXCDerivativeFlags>,
     ) -> Result<LibXCOutputLayout, LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_xc_with_unsliced_output instead".into(),
+            ));
+        }
         use crate::prelude::libxc_enum_items::*;
         match self.family() {
             LDA | HybLDA => self.compute_lda_with_unsliced_output(input, output, deriv_flags),
@@ -960,6 +990,13 @@ impl LibXCFunctional {
         input: &LibXCCpuInput,
         output: &LibXCCpuOutputMut,
     ) -> Result<(), LibXCError> {
+        #[cfg(feature = "cuda")]
+        if self.is_on_device() {
+            return Err(LibXCError::ComputeError(
+                "functional was initialized for GPU; use cuda_compute_xc_with_output instead"
+                    .into(),
+            ));
+        }
         use crate::prelude::libxc_enum_items::*;
         match self.family() {
             LDA | HybLDA => self.compute_lda_with_output(input, output),

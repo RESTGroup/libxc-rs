@@ -122,6 +122,7 @@ pub struct LibXCReference {
 /// [`LibXCOutputLayout`]: crate::layout_handling::LibXCOutputLayout
 pub struct LibXCFunctional {
     pub(crate) ptr: *mut ffi::xc_func_type,
+    pub(crate) device_flag: Option<LibXCDeviceFlag>,
 }
 
 /// Creation functions implementation.
@@ -176,12 +177,87 @@ impl LibXCFunctional {
                 ffi::xc_func_free(ptr);
                 return Err(LibXCError::InitError { func_id, spin });
             }
-            Ok(Self { ptr })
+            Ok(Self { ptr, device_flag: None })
         }
     }
 
     unsafe fn init_func(ptr: *mut ffi::xc_func_type, func_id: i32, spin: LibXCSpin) -> c_int {
-        ffi::xc_func_init(ptr, func_id as c_int, spin as c_int)
+        #[cfg(not(feature = "api-v7_1"))]
+        {
+            ffi::xc_func_init(ptr, func_id as c_int, spin as c_int)
+        }
+        #[cfg(feature = "api-v7_1")]
+        {
+            ffi::xc_func_init_flags(
+                ptr,
+                func_id as c_int,
+                spin as c_int,
+                LibXCDeviceFlag::OnHost as c_int,
+            )
+        }
+    }
+}
+
+/// Creation functions for CUDA (device) functionals.
+#[cfg(feature = "cuda")]
+impl LibXCFunctional {
+    /// Create a new functional on the specified device (GPU or CPU).
+    ///
+    /// This uses `xc_func_init_flags` internally, which requires libxc >= 7.1
+    /// compiled with CUDA support.
+    pub fn from_identifier_with_device(
+        name: &str,
+        spin: LibXCSpin,
+        device: LibXCDeviceFlag,
+    ) -> Self {
+        Self::from_identifier_with_device_f(name, spin, device).unwrap()
+    }
+
+    /// Create a new functional on the specified device (fallible).
+    pub fn from_identifier_with_device_f(
+        name: &str,
+        spin: LibXCSpin,
+        device: LibXCDeviceFlag,
+    ) -> Result<Self, LibXCError> {
+        let func_id = crate::util::libxc_functional_get_number(name)
+            .ok_or_else(|| LibXCError::NotFound(format!("functional '{name}'")))?;
+        Self::from_number_with_device_f(func_id, spin, device)
+    }
+
+    /// Create a new functional from ID on the specified device.
+    pub fn from_number_with_device(func_id: i32, spin: LibXCSpin, device: LibXCDeviceFlag) -> Self {
+        Self::from_number_with_device_f(func_id, spin, device).unwrap()
+    }
+
+    /// Create a new functional from ID on the specified device (fallible).
+    pub fn from_number_with_device_f(
+        func_id: i32,
+        spin: LibXCSpin,
+        device: LibXCDeviceFlag,
+    ) -> Result<Self, LibXCError> {
+        unsafe {
+            let ptr = ffi::xc_func_alloc();
+            if ptr.is_null() {
+                return Err(LibXCError::InitError { func_id, spin });
+            }
+            let flags = device as c_int;
+            let rc = ffi::xc_func_init_flags(ptr, func_id as c_int, spin as c_int, flags);
+            if rc != 0 {
+                ffi::xc_func_free(ptr);
+                return Err(LibXCError::InitError { func_id, spin });
+            }
+            Ok(Self { ptr, device_flag: Some(device) })
+        }
+    }
+
+    /// Returns the device flag this functional was initialized with.
+    pub fn device_flag(&self) -> Option<LibXCDeviceFlag> {
+        self.device_flag
+    }
+
+    /// Returns true if this functional was initialized for GPU execution.
+    pub fn is_on_device(&self) -> bool {
+        matches!(self.device_flag, Some(LibXCDeviceFlag::OnDevice))
     }
 }
 
@@ -811,7 +887,12 @@ impl LibXCFunctional {
     /// Set all external parameters at once (fallible).
     pub fn set_ext_params_f(&mut self, params: &[f64]) -> Result<(), LibXCError> {
         let n = self.n_ext_params() as usize;
-        assert_eq!(params.len(), n, "Expected {} external parameters, got {}", n, params.len());
+        if params.len() != n {
+            return Err(LibXCError::ParamSetError {
+                param_name: "ext_params".to_string(),
+                details: format!("expected {n} parameters, got {}", params.len()),
+            });
+        }
         unsafe {
             ffi::xc_func_set_ext_params(self.ptr, params.as_ptr());
         }
@@ -1120,6 +1201,7 @@ impl core::fmt::Debug for LibXCFunctional {
             .field("number", &self.number())
             .field("family", &self.family())
             .field("spin", &self.spin())
+            .field("device_flag", &self.device_flag)
             .finish()
     }
 }

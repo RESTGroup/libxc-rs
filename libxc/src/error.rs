@@ -13,6 +13,9 @@ pub enum LibXCError {
     ComputeError(String),
     /// Error related to parameter setting.
     ParamSetError { param_name: String, details: String },
+    /// Error related to CUDA operations.
+    #[cfg(feature = "cuda")]
+    CudaError(String),
 }
 
 impl fmt::Display for LibXCError {
@@ -26,6 +29,8 @@ impl fmt::Display for LibXCError {
             LibXCError::ParamSetError { param_name, details } => {
                 write!(f, "parameter set error for {param_name}: {details}")
             },
+            #[cfg(feature = "cuda")]
+            LibXCError::CudaError(msg) => write!(f, "cuda error: {msg}"),
         }
     }
 }

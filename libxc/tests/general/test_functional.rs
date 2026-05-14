@@ -150,10 +150,9 @@ fn test_ext_params() {
 }
 
 #[test]
-#[should_panic(expected = "Expected 3 external parameters")]
 fn test_ext_params_wrong_length() {
     let mut func = LibXCFunctional::from_identifier("hyb_gga_xc_hse06", Unpolarized);
-    func.set_ext_params(&[5.0, 3.0]); // should be 3 params
+    assert!(func.set_ext_params_f(&[5.0, 3.0]).is_err()); // should be 3 params
 }
 
 // ===========================================================================

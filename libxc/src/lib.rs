@@ -30,6 +30,9 @@ pub mod util;
 pub mod compute_cpu;
 pub mod layout_handling;
 
+#[cfg(feature = "cuda")]
+pub mod compute_cuda;
+
 pub mod prelude {
     pub use crate::enums::*;
     pub use crate::error::*;

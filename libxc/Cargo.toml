@@ -19,7 +19,7 @@ libc = { version = "0.2" }
 indexmap = { version = "2.14" }
 lazy_static = { version = "1.5" }
 strum = { version = "0.28" }
-cudarc = { version = "0.19", optional = true }
+cudarc = { version = "0.19", optional = true, features = ["cuda-13020"] }
 
 [dev-dependencies]
 toml = { version = "1.1" }
@@ -33,7 +33,7 @@ default = ["api-v7_0", "dynamic_loading"]
 dynamic_loading = ["libxc-ffi/dynamic_loading"]
 
 # GPU support
-cuda = ["dep:cudarc"]
+cuda = ["dep:cudarc", "api-v7_1"]
 
 # API versions of original libxc (cumulative)
 api-v6_2 = ["libxc-ffi/api-v6_2"]
