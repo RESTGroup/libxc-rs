@@ -4,8 +4,10 @@ use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+type RefKey = (String, String, String); // (category, xc_name, species)
+
 lazy_static::lazy_static! {
-    static ref REF: Vec<((String, String, String), HashMap<String, Vec<f64>>)> = {
+    static ref REF: Vec<(RefKey, HashMap<String, Vec<f64>>)> = {
         // CARGO_MANIFEST_DIR/tests/regression/reference.toml
         // example toml content:
         // [gga_c.acgga.Li]
@@ -16,7 +18,8 @@ lazy_static::lazy_static! {
         let mut m = Vec::new();
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/regression/reference.toml");
         let content = std::fs::read_to_string(path).expect("Failed to read reference.toml");
-        let data: HashMap<String, HashMap<String, HashMap<String, HashMap<String, Vec<f64>>>>> = toml::from_str(&content).expect("Failed to parse reference.toml");
+        type RefData = HashMap<String, HashMap<String, HashMap<String, HashMap<String, Vec<f64>>>>>;
+        let data: RefData = toml::from_str(&content).expect("Failed to parse reference.toml");
         for (category, xc_map) in data {
             for (xc_name, species_map) in xc_map {
                 for (species, values) in species_map {
@@ -62,7 +65,7 @@ fn test_regression_entry(
     // Skip known-mismatching (functional, species) combinations
     let xc_id = format!("{}.{}.{}", category, xc_name, species);
     if SKIPPED_CASES.contains(xc_id.as_str()) {
-        return Err(format!("SKIP"));
+        return Err("SKIP".to_string());
     }
 
     // BrOH is always unpolarized; _restr species are unpolarized; all others are

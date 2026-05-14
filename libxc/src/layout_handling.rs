@@ -46,7 +46,7 @@ impl From<usize> for LibXCDerivativeFlags {
 // -- Output label definitions (mirroring pylibxc output_labels) --------
 
 #[rustfmt::skip]
-pub const LDA_OUTPUT_LABELS: [&'static str; 5] = [
+pub const LDA_OUTPUT_LABELS: [&str; 5] = [
     "zk",                                                               // 1
     "vrho",                                                             // 1
     "v2rho2",                                                           // 1
@@ -60,7 +60,7 @@ const LDA_KXC_END: usize = 4;
 const LDA_LXC_END: usize = 5;
 
 #[rustfmt::skip]
-pub const GGA_OUTPUT_LABELS: [&'static str; 15] = [
+pub const GGA_OUTPUT_LABELS: [&str; 15] = [
     "zk",                                                               // 1
     "vrho", "vsigma",                                                   // 2
     "v2rho2", "v2rhosigma", "v2sigma2",                                 // 3
@@ -74,7 +74,7 @@ const GGA_KXC_END: usize = 10;
 const GGA_LXC_END: usize = 15;
 
 #[rustfmt::skip]
-pub const MGGA_OUTPUT_LABELS: [&'static str; 70] = [
+pub const MGGA_OUTPUT_LABELS: [&str; 70] = [
     "zk",                                                               // 1
     "vrho", "vsigma", "vlapl", "vtau",                                  // 4
     "v2rho2", "v2rhosigma", "v2rholapl", "v2rhotau", "v2sigma2",        // 10
@@ -180,6 +180,7 @@ pub fn get_dim(dim: &ffi::xc_dimensions, label: &str) -> i32 {
 /// Mirrors pylibxc's `_check_arrays`: iterates output labels in
 /// `labels[start..end]`, pushing those whose derivative level is
 /// required and whose lapl/tau needs are satisfied.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_arrays(
     layout: &mut LibXCOutputLayout,
     labels: &[&'static str],

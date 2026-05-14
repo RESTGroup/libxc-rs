@@ -45,10 +45,7 @@ impl LibXCFunctional {
         };
         // raise error if not hybrid
         if let Some(details) = details {
-            return Err(LibXCError::ParamSetError {
-                param_name: "hyb_exx_coef".to_string(),
-                details,
-            });
+            Err(LibXCError::ParamSetError { param_name: "hyb_exx_coef".to_string(), details })
         } else {
             unsafe { (*self.ptr).cam_alpha = hyb_exx_coef };
             Ok(())

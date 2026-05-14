@@ -16,7 +16,7 @@ pub type LibXCCpuInput<'a> = HashMap<String, &'a [f64]>;
 fn require_input<'a>(input: &LibXCCpuInput<'a>, key: &str) -> Result<&'a [f64], LibXCError> {
     input
         .get(key)
-        .map(|s| *s)
+        .copied()
         .ok_or_else(|| LibXCError::ComputeError(format!("{key}: required input not provided")))
 }
 
@@ -222,7 +222,7 @@ impl LibXCFunctional {
         let npoints = rho.len() / nspin;
         let rho_ptr = rho.as_ptr();
         let dim = self.dim();
-        let ptrs = validate_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, &dim)?;
+        let ptrs = validate_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, dim)?;
 
         unsafe {
             ffi::xc_lda(
@@ -355,7 +355,7 @@ impl LibXCFunctional {
         let rho_ptr = rho.as_ptr();
         let dim = self.dim();
         let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
-        let ptrs = validate_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, &dim)?;
+        let ptrs = validate_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, dim)?;
 
         unsafe {
             ffi::xc_gga(
@@ -416,6 +416,7 @@ impl LibXCFunctional {
     }
 
     /// Invoke `xc_mgga` FFI call, writing into `output` according to `layout`.
+    #[allow(clippy::too_many_arguments)]
     fn mgga_call(
         &self,
         npoints: usize,
@@ -572,7 +573,7 @@ impl LibXCFunctional {
         let sigma_ptr = require_input_ptr(input, "sigma", npoints, dim.sigma)?;
         let lapl_ptr = conditional_input_ptr(input, "lapl", npoints, dim.lapl, needs_lapl)?;
         let tau_ptr = conditional_input_ptr(input, "tau", npoints, dim.tau, needs_tau)?;
-        let ptrs = validate_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, &dim)?;
+        let ptrs = validate_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, dim)?;
 
         unsafe {
             ffi::xc_mgga(

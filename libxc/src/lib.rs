@@ -7,9 +7,10 @@
 //! single DFT exchange-correlation functional. It wraps the C `xc_func_type`
 //! pointer, manages its lifetime, and exposes three categories of operations:
 //!
-//! - **Construction** — create a functional by name or ID, with spin polarization:
-//!   [`from_identifier`](LibXCFunctional::from_identifier),
-//!   [`from_number`](LibXCFunctional::from_number) (plus `_f` fallible variants).
+//! - **Construction** — create a functional by name or ID, with spin
+//!   polarization: [`from_identifier`](LibXCFunctional::from_identifier),
+//!   [`from_number`](LibXCFunctional::from_number) (plus `_f` fallible
+//!   variants).
 //!
 //! - **Introspection** — query identity, family (LDA/GGA/MGGA/hybrid), kind,
 //!   capability flags, hybrid/CAM/VV10 coefficients, auxiliary functionals, and
@@ -18,7 +19,7 @@
 //! - **Computation** — evaluate the functional and its derivatives (up to 4th
 //!   order) on a grid via [`compute_xc`](LibXCFunctional::compute_xc) and
 //!   variants.
-#[doc = include_str!("../readme.md")]
+#![doc = include_str!("../readme.md")]
 
 pub mod enums;
 pub mod error;

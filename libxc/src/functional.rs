@@ -864,7 +864,7 @@ impl LibXCFunctional {
             if !map.contains_key(key) {
                 return Err(LibXCError::ParamSetError {
                     param_name: key.to_string(),
-                    details: format!("external parameter not found"),
+                    details: "external parameter not found".to_string(),
                 });
             }
             map.insert(key.to_string(), val);
@@ -1100,7 +1100,7 @@ impl LibXCFunctional {
         let mut weights = vec![0.0f64; n as usize];
         unsafe { ffi::xc_aux_func_ids(self.ptr, ids.as_mut_ptr()) }
         unsafe { ffi::xc_aux_func_weights(self.ptr, weights.as_mut_ptr()) }
-        ids.into_iter().zip(weights.into_iter()).collect()
+        ids.into_iter().zip(weights).collect()
     }
 }
 

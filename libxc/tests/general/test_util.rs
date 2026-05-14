@@ -50,7 +50,7 @@ fn test_xc_available_functional_numbers() {
 
     // Make sure the range on all values is reasonable
     assert!(func_nums.iter().all(|&x| x > 0));
-    assert!(func_nums.iter().all(|&x| x < 2000 || x > 100000));
+    assert!(func_nums.iter().all(|&x| !(2000..=100000).contains(&x)));
 }
 
 #[test]
