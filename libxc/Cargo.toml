@@ -19,7 +19,7 @@ libc = { version = "0.2" }
 indexmap = { version = "2.14" }
 lazy_static = { version = "1.5" }
 strum = { version = "0.28" }
-cudarc = { version = "0.19", optional = true, features = ["cuda-13020"] }
+cudarc = { version = "0.19", optional = true, default-feature = false, features = ["cuda-13020"] }
 
 [dev-dependencies]
 toml = { version = "1.1" }
