@@ -17,4 +17,5 @@ jobs:
         run: |
           conda install libxc -c conda-forge
           ls /usr/share/miniconda/lib
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/share/miniconda/lib
           cargo test -p libxc --no-default-features --features="api-v7_0" -- --nocapture
