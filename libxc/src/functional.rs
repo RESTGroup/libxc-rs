@@ -129,7 +129,8 @@ impl LibXCFunctional {
     /// Create a new functional from a name string and spin configuration.
     ///
     /// The functional is initialized on the host (CPU). To create a functional
-    /// on the GPU, use [`from_identifier_with_device`](Self::from_identifier_with_device)
+    /// on the GPU, use
+    /// [`from_identifier_with_device`](Self::from_identifier_with_device)
     /// with [`LibXCDeviceFlag::OnDevice`] (requires the `cuda` feature).
     ///
     /// # Example
