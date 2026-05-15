@@ -15,7 +15,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
       - name: run tests
         run: |
-          conda create libxc python=3.11 -c conda-forge
+          conda install libxc python=3.11 -c conda-forge
           ls /usr/share/miniconda/lib
           cargo test -p libxc --no-default-features --features="api-v7_0" -- --nocapture
   
@@ -26,6 +26,6 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
       - name: run tests
         run: |
-          conda create libxc=*=cuda* python=3.11 -c conda-forge
+          conda install libxc=*=cuda* python=3.11 -c conda-forge
           ls /usr/share/miniconda/lib
           cargo test -p libxc --no-default-features --features="api-v7_0 cuda" -- --nocapture
