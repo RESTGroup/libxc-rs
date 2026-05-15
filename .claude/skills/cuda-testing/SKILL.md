@@ -1,3 +1,8 @@
+---
+name: cuda-testing
+description: Instructions for testing CUDA compute in libxc-rs, including setup, running tests.
+---
+
 # CUDA Testing Instructions
 
 This project supports CUDA compute via the `cuda` cargo feature, which requires
