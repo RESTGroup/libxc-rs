@@ -3,11 +3,33 @@
 use libxc_ffi::ffi;
 use std::ffi::CStr;
 
+/// Pointer to String (only for static const char*).
 unsafe fn cstr_to_string(ptr: *const std::ffi::c_char) -> String {
     if ptr.is_null() {
         return String::new();
     }
     CStr::from_ptr(ptr).to_string_lossy().into_owned()
+}
+
+/// Pointer to String with free (for functions that return newly allocated
+/// char*).
+///
+/// Note cuda+v7.0 uses `cudaMalloc` for these strings, so we need to use
+/// `cudaFree` instead of `libc::free`.
+unsafe fn cstr_to_string_with_free(ptr: *const std::ffi::c_char) -> String {
+    let s = cstr_to_string(ptr);
+    unsafe fn free_ptr(p: *mut std::ffi::c_void) {
+        #[cfg(all(feature = "cuda", not(feature = "api-v7_1")))]
+        {
+            cudarc::runtime::sys::cudaFree(p);
+        }
+        #[cfg(any(not(feature = "cuda"), feature = "api-v7_1"))]
+        {
+            libc::free(p);
+        }
+    }
+    unsafe { free_ptr(ptr as *mut std::ffi::c_void) };
+    s
 }
 
 /// Returns the libxc version as (major, minor, micro).
@@ -54,11 +76,7 @@ pub fn libxc_functional_get_name(number: i32) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
-    let s = unsafe { cstr_to_string(ptr) };
-    // xc_functional_get_name allocates memory that must be freed
-    unsafe {
-        libc::free(ptr as *mut std::ffi::c_void);
-    }
+    let s = unsafe { cstr_to_string_with_free(ptr) };
     (!s.is_empty()).then_some(s)
 }
 
@@ -95,8 +113,7 @@ pub fn libxc_available_functional_names() -> Vec<String> {
             if ptr.is_null() {
                 return None;
             }
-            let s = unsafe { cstr_to_string(ptr) };
-            unsafe { libc::free(ptr as *mut std::ffi::c_void) };
+            let s = unsafe { cstr_to_string_with_free(ptr) };
             (!s.is_empty()).then_some(s)
         })
         .collect()

@@ -348,7 +348,7 @@ impl LibXCFunctional {
     /// assert_eq!(xc_func.identifier(), "gga_c_xpbe");
     /// ```
     pub fn identifier(&self) -> String {
-        unsafe { cstr_to_string(ffi::xc_functional_get_name(self.number())) }
+        crate::util::libxc_functional_get_name(self.number()).unwrap_or_default()
     }
 
     /// Functional name for display purposes.
@@ -1171,7 +1171,7 @@ impl LibXCFunctional {
         self.aux_funcs_by_id()
             .into_iter()
             .map(|(id, weight)| {
-                let name = unsafe { cstr_to_string(ffi::xc_functional_get_name(id)) };
+                let name = crate::util::libxc_functional_get_name(id).unwrap_or_default();
                 (name, weight)
             })
             .collect()

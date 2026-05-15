@@ -24,7 +24,7 @@ strum = { version = "0.28" }
 # picks the newest supported version so the build doesn't fail on machines
 # without a CUDA toolkit installed at compile time.
 cudarc = { version = "0.19", optional = true, default-features = false, features = [
-    "driver", "std",
+    "driver", "std", "runtime",
     "cuda-version-from-build-system", "fallback-latest",
     "fallback-dynamic-loading",
 ] }
