@@ -50,6 +50,7 @@ pub mod prelude {
     pub(crate) use indexmap::IndexMap;
     pub(crate) use libxc_ffi::ffi;
     pub(crate) use std::collections::HashMap;
+    pub(crate) use std::ffi::CString;
 }
 
 // documentation exception

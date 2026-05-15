@@ -66,7 +66,8 @@ pub struct LibXCReference {
 ///
 /// - **External parameters**: [`ext_param_values`](Self::ext_param_values),
 ///   [`set_ext_params`](Self::set_ext_params),
-///   [`set_ext_param_map`](Self::set_ext_param_map) — modify functional
+///   [`set_ext_param_map`](Self::set_ext_param_map),
+///   [`set_ext_param_by_name`](Self::set_ext_param_by_name) — modify functional
 ///   parameters (e.g. range-separation ω in ωB97X-V).
 /// - **Hybrid / range-separated / VV10 setters** (not in pylibxc):
 ///   [`set_hyb_exx_coef`](Self::set_hyb_exx_coef),
@@ -970,6 +971,45 @@ impl LibXCFunctional {
         }
         let params: Vec<f64> = map.values().cloned().collect();
         self.set_ext_params_f(&params)?;
+        Ok(())
+    }
+
+    /// Set a single external parameter by name.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use libxc::prelude::{libxc_enum_items::*, *};
+    /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    /// xc_func.set_ext_param_by_name("_a", 0.1);
+    /// xc_func.set_ext_param_by_name("_d", 0.2);
+    /// xc_func.set_ext_param_by_name("_omega", 0.58);
+    /// for (key, val) in xc_func.ext_param_map() {
+    ///     println!("{key:>10}: {val}");
+    /// }
+    /// // Output:
+    /// //     _a: 0.1
+    /// //     _b: 0.132
+    /// //     _c: 0.2533
+    /// //     _d: 0.2
+    /// //    _m1: 0.15283842794759825
+    /// //    _m2: 0.8733624454148472
+    /// // _omega: 0.58
+    /// ```
+    pub fn set_ext_param_by_name(&mut self, name: &str, value: f64) {
+        self.set_ext_param_by_name_f(name, value).unwrap()
+    }
+
+    /// Set a single external parameter by name (fallible).
+    pub fn set_ext_param_by_name_f(&mut self, name: &str, value: f64) -> Result<(), LibXCError> {
+        if !self.ext_param_names().contains(&name.to_string()) {
+            return Err(LibXCError::ParamSetError {
+                param_name: name.to_string(),
+                details: "external parameter not found".to_string(),
+            });
+        }
+        let c_name = CString::new(name).expect("parameter name contains null byte");
+        unsafe { ffi::xc_func_set_ext_params_name(self.ptr, c_name.as_ptr(), value) };
         Ok(())
     }
 }

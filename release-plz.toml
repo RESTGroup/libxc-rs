@@ -6,4 +6,3 @@ git_tag_enable = false
 name = "libxc"
 git_release_enable = true
 git_tag_enable = true
-
