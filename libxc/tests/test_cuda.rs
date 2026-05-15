@@ -5,7 +5,6 @@
 //! --test test_cuda
 
 #[cfg(feature = "cuda")]
-#[cfg(feature = "api-v7_1")]
 mod cuda_tests {
     use libxc::compute_cuda::*;
     use libxc::enums::libxc_enum_items::*;

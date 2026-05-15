@@ -203,8 +203,10 @@ impl LibXCFunctional {
 impl LibXCFunctional {
     /// Create a new functional on the specified device (GPU or CPU).
     ///
-    /// This uses `xc_func_init_flags` internally, which requires libxc >= 7.1
-    /// compiled with CUDA support.
+    /// For libxc >= 7.1, this uses `xc_func_init_flags` internally for
+    /// per-functional CPU/GPU selection. For libxc 7.0 with CUDA support,
+    /// this uses `xc_func_init` (the library must be compiled with
+    /// `--enable-cuda`).
     pub fn from_identifier_with_device(
         name: &str,
         spin: LibXCSpin,
@@ -240,8 +242,19 @@ impl LibXCFunctional {
             if ptr.is_null() {
                 return Err(LibXCError::InitError { func_id, spin });
             }
-            let flags = device as c_int;
-            let rc = ffi::xc_func_init_flags(ptr, func_id as c_int, spin as c_int, flags);
+            let rc = {
+                #[cfg(feature = "api-v7_1")]
+                {
+                    ffi::xc_func_init_flags(ptr, func_id as c_int, spin as c_int, device as c_int)
+                }
+                #[cfg(not(feature = "api-v7_1"))]
+                {
+                    // v7.0: only xc_func_init exists; device is a compile-time
+                    // property of the library. xc_func_init works for both CPU
+                    // and GPU libraries.
+                    ffi::xc_func_init(ptr, func_id as c_int, spin as c_int)
+                }
+            };
             if rc != 0 {
                 ffi::xc_func_free(ptr);
                 return Err(LibXCError::InitError { func_id, spin });

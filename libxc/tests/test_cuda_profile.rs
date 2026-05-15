@@ -5,7 +5,6 @@
 //!   --nocapture
 
 #[cfg(feature = "cuda")]
-#[cfg(feature = "api-v7_1")]
 mod profile {
     use libxc::compute_cuda::*;
     use libxc::enums::libxc_enum_items::*;

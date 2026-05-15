@@ -41,7 +41,7 @@ default = ["api-v7_0", "dynamic_loading"]
 dynamic_loading = ["libxc-ffi/dynamic_loading"]
 
 # GPU support
-cuda = ["dep:cudarc", "api-v7_1"]
+cuda = ["dep:cudarc"]
 
 # API versions of original libxc (cumulative)
 api-v6_2 = ["libxc-ffi/api-v6_2"]
