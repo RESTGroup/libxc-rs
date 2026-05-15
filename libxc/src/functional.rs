@@ -128,8 +128,9 @@ pub struct LibXCFunctional {
 impl LibXCFunctional {
     /// Create a new functional from a name string and spin configuration.
     ///
-    /// This function will use the default device (CPU/host or GPU/device),
-    /// which is determined at compile-time.
+    /// The functional is initialized on the host (CPU). To create a functional
+    /// on the GPU, use [`from_identifier_with_device`](Self::from_identifier_with_device)
+    /// with [`LibXCDeviceFlag::OnDevice`] (requires the `cuda` feature).
     ///
     /// # Example
     ///
@@ -141,11 +142,7 @@ impl LibXCFunctional {
     ///
     /// # PyLibxc counterpart
     ///
-    /// `pylibxc.functional.LibXCFunctional.__init__`
-    ///
-    /// Note that we currently have not implemented the `flag` argument from
-    /// PyLibxc, which allows users to specify the device (e.g. CPU vs GPU) at
-    /// runtime.
+    /// `pylibxc.functional.LibXCFunctional.__init__` (without `func_flags`)
     pub fn from_identifier(name: &str, spin: LibXCSpin) -> Self {
         Self::from_identifier_f(name, spin).unwrap()
     }

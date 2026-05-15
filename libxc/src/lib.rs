@@ -18,7 +18,10 @@
 //!
 //! - **Computation** — evaluate the functional and its derivatives (up to 4th
 //!   order) on a grid via [`compute_xc`](LibXCFunctional::compute_xc) and
-//!   variants.
+//!   variants. With the `cuda` feature, GPU computation is available via
+//!   [`cuda_compute_xc`](LibXCFunctional::cuda_compute_xc) using functionals
+//!   created with
+//!   [`from_identifier_with_device`](LibXCFunctional::from_identifier_with_device).
 #![doc = include_str!("../readme.md")]
 
 pub mod enums;

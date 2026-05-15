@@ -50,8 +50,11 @@ Default features:
 
 Other features:
 - **`api-v6_2`**: Binds libxc v6.2.2 (base API).
-- **`api-v7_1`**: Binds libxc v7.1.0 API (cumulative with `api-v7_0`). Adds `xc_func_init_flags` and runtime device selection.
-- **`cuda`**: GPU type support via `cudarc` (CUDA compute not yet implemented).
+- **`api-v7_1`**: Binds libxc v7.1.0 API (cumulative with `api-v7_0`). Adds `xc_func_init_flags` and runtime device selection. Note v7.1.0 is not a released version (devel branch of original libxc), API may change for v7.1.
+- **`cuda`**: GPU computation support via `cudarc`.
+  - Creates GPU functionals with [`LibXCFunctional::from_identifier_with_device`] and [`LibXCDeviceFlag::OnDevice`]; computes with [`cuda_compute_xc`] (and per-family `cuda_compute_lda`/`gga`/`mgga`, plus `_with_output`/`_with_unsliced_output` variants).
+  - Input/output types are [`LibXCCudaInput`] (`HashMap<String, CudaView<f64>>`) and [`LibXCCudaOutputMut`] (`HashMap<String, CudaViewMut<f64>>`).
+  - **v7.1 vs v7.0**: With v7.1, a single libxc shared library can run both CPU and CUDA functionals; device is selected per-functional via `xc_func_init_flags`. With v7.0, the shared library is compiled as either CPU-only or CUDA-only — device is a compile-time property of the library, not per-functional. Please call the correct compute function to the corresponding CPU/CUDA shared library.
 
 ## Crate `libxc-ffi`
 

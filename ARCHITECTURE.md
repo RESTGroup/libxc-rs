@@ -36,10 +36,12 @@ libxc-rs/                         # Cargo workspace root
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs                # Module declarations, prelude
-│       ├── enums.rs              # Rust enums: Spin, Family, Kind, Flags, FuncId
+│       ├── enums.rs              # Rust enums: Spin, Family, Kind, Flags, DeviceFlag, FuncId
 │       ├── error.rs              # LibXCError enum
 │       ├── functional.rs         # LibXCFunctional: creation, info, params, thresholds
+│       ├── functional_specific.rs # Functional-specific setters (hybrid/CAM/VV10 coefficients)
 │       ├── compute_cpu.rs        # LibXCFunctional: CPU compute methods (LDA/GGA/MGGA)
+│       ├── compute_cuda.rs       # LibXCFunctional: CUDA compute methods (LDA/GGA/MGGA, gated by `cuda` feature)
 │       ├── layout_handling.rs    # LibXCOutputLayout, LibXCDerivativeFlags, output labels
 │       └── util.rs               # Utility: version, functional lookup, library path
 │
@@ -164,8 +166,10 @@ The central type, wrapping a `*mut ffi::xc_func_type` pointer. It is split acros
 
 | File | Responsibility |
 |------|---------------|
-| `functional.rs` | Construction (`from_identifier`, `from_number`), info getters (`number`, `kind`, `family`, `flags`, `spin`, `dim`), references, description, external parameters, thresholds, hybrid/CAM/VV10 coefficients, auxiliary functionals, Drop |
+| `functional.rs` | Construction (`from_identifier`, `from_number`, `from_identifier_with_device`, `from_number_with_device`), info getters (`number`, `kind`, `family`, `flags`, `spin`, `dim`, `device_flag`, `is_on_device`), references, description, external parameters, thresholds, hybrid/CAM/VV10 coefficients, auxiliary functionals, Drop |
+| `functional_specific.rs` | Hybrid/CAM/VV10 coefficient setters |
 | `compute_cpu.rs` | CPU compute methods: `compute_lda`, `compute_gga`, `compute_mgga`, and unified `compute_xc` dispatch |
+| `compute_cuda.rs` | CUDA compute methods (gated by `cuda` feature): `cuda_compute_lda`, `cuda_compute_gga`, `cuda_compute_mgga`, and unified `cuda_compute_xc` dispatch |
 | `layout_handling.rs` | `LibXCOutputLayout`, `LibXCDerivativeFlags`, output label tables, `validate_flags` |
 
 ### Compute API
@@ -179,6 +183,20 @@ Three compute modes per family (LDA/GGA/MGGA):
 | `compute_<family>_with_output` | `()` | User provides named `HashMap<&str, &mut [f64]>` |
 
 Unified dispatch via `compute_xc` / `compute_xc_with_unsliced_output` / `compute_xc_with_output` routes to the correct family automatically.
+
+#### CUDA Compute API (gated by `cuda` feature)
+
+Three compute modes per family, mirroring the CPU API but operating on GPU memory via `cudarc`:
+
+| Method | Output | Description |
+|--------|--------|-------------|
+| `cuda_compute_<family>` | `(CudaSlice<f64>, Layout)` | Auto-allocates zero-initialized GPU buffer |
+| `cuda_compute_<family>_with_unsliced_output` | `Layout` | User provides `CudaSlice<f64>` buffer |
+| `cuda_compute_<family>_with_output` | `()` | User provides named `HashMap<&str, CudaViewMut<f64>>` |
+
+Unified dispatch via `cuda_compute_xc` / `cuda_compute_xc_with_unsliced_output` / `cuda_compute_xc_with_output`.
+
+The functional must be initialized with `from_identifier_with_device(name, spin, LibXCDeviceFlag::OnDevice)`. Input types: `LibXCCudaInput = HashMap<String, CudaView<f64>>`, output: `LibXCCudaOutputMut = HashMap<String, CudaViewMut<f64>>`.
 
 ### Input/Output Convention
 
@@ -275,5 +293,5 @@ All three scripts accept optional arguments: `[source_path] [output_file]`. If n
 1. **No external tensor/matrix libraries** -- raw `&[f64]` slices only (exception: `cudarc` for GPU type support)
 2. **FFI bindgen is auto-generated** -- manual edits only in `ffi_dynamic/mod.rs`
 3. **Dynamic loading is the default** -- avoids compile-time libxc dependency
-4. **CPU and CUDA are separated** -- CUDA always has explicit prefix (TODO: CUDA support is planned but not yet implemented, so this is future-proofing)
+4. **CPU and CUDA are separated** -- CUDA always has explicit prefix (`cuda_compute_*`, `from_identifier_with_device`), CPU has no prefix
 5. **Output uses contiguous buffers** -- allow multiple related pointers (e.g. `v3rho3`, `v3rho2sigma`, ...) packed into `[n_comp, npoints]` memory buffer to minimize allocations
