@@ -1,3 +1,5 @@
+#![cfg(feature = "api-v7_1")]
+
 use super::example_densities;
 use libxc::prelude::{libxc_enum_items::*, *};
 use rayon::prelude::*;
@@ -108,7 +110,6 @@ fn test_regression_entry(
 }
 
 #[test]
-#[cfg(feature = "api-v7_1")]
 #[ignore = r#"
     probably problems in libxc:
     - no exc capibilities: mgga_x_bj06, gga_x_lbm, gga_x_lb, mgga_x_rpp09, mgga_x_tb09, lda_xc_tih

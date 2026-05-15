@@ -122,7 +122,6 @@ pub struct LibXCReference {
 /// [`LibXCOutputLayout`]: crate::layout_handling::LibXCOutputLayout
 pub struct LibXCFunctional {
     pub(crate) ptr: *mut ffi::xc_func_type,
-    pub(crate) device_flag: Option<LibXCDeviceFlag>,
 }
 
 /// Creation functions implementation.
@@ -177,7 +176,7 @@ impl LibXCFunctional {
                 ffi::xc_func_free(ptr);
                 return Err(LibXCError::InitError { func_id, spin });
             }
-            Ok(Self { ptr, device_flag: None })
+            Ok(Self { ptr })
         }
     }
 
@@ -259,18 +258,26 @@ impl LibXCFunctional {
                 ffi::xc_func_free(ptr);
                 return Err(LibXCError::InitError { func_id, spin });
             }
-            Ok(Self { ptr, device_flag: Some(device) })
+            (*(*ptr).info).flags |= device as i32;
+            Ok(Self { ptr })
         }
     }
 
     /// Returns the device flag this functional was initialized with.
     pub fn device_flag(&self) -> Option<LibXCDeviceFlag> {
-        self.device_flag
+        let flags = self.flags();
+        if flags.contains(LibXCFlags::OnDevice) {
+            Some(LibXCDeviceFlag::OnDevice)
+        } else if flags.contains(LibXCFlags::OnHost) {
+            Some(LibXCDeviceFlag::OnHost)
+        } else {
+            None
+        }
     }
 
     /// Returns true if this functional was initialized for GPU execution.
     pub fn is_on_device(&self) -> bool {
-        matches!(self.device_flag, Some(LibXCDeviceFlag::OnDevice))
+        self.flags().contains(LibXCFlags::OnDevice)
     }
 }
 
@@ -1214,7 +1221,6 @@ impl core::fmt::Debug for LibXCFunctional {
             .field("number", &self.number())
             .field("family", &self.family())
             .field("spin", &self.spin())
-            .field("device_flag", &self.device_flag)
             .finish()
     }
 }

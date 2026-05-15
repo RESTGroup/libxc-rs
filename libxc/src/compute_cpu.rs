@@ -583,7 +583,12 @@ impl LibXCFunctional {
         #[cfg(feature = "cuda")]
         if self.is_on_device() {
             return Err(LibXCError::ComputeError(
-                "functional was initialized for GPU; use cuda_compute_xc instead".into(),
+                r#"
+Functional was initialized for GPU; use cuda_compute_xc instead.
+Also make sure appropriate cargo feature (api-v7_0, api-v7_1)
+is enabled according to your libxc version."#
+                    .trim()
+                    .into(),
             ));
         }
         use crate::prelude::libxc_enum_items::*;
