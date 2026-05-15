@@ -15,4 +15,4 @@ categories = ["science"]
 license = "Apache-2.0"
 
 [workspace.dependencies]
-libxc-ffi = { path = "libxc-ffi" }
+libxc-ffi = { path = "libxc-ffi", version = "0.1.0" }
