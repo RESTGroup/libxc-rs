@@ -27,6 +27,7 @@ fn test_xc_functional_get_number() {
 }
 
 #[test]
+#[cfg_attr(all(feature = "cuda", not(feature = "api-v7_1")), ignore = "v7.0 CUDA library uses cudaMallocManaged; libc::free crashes")]
 fn test_xc_functional_get_name() {
     assert_eq!(libxc_functional_get_name(32).as_deref(), Some("gga_x_gam"));
     assert_eq!(libxc_functional_get_name(50000), None);
@@ -54,6 +55,7 @@ fn test_xc_available_functional_numbers() {
 }
 
 #[test]
+#[cfg_attr(all(feature = "cuda", not(feature = "api-v7_1")), ignore = "v7.0 CUDA library uses cudaMallocManaged; libc::free crashes")]
 fn test_xc_available_functional_names() {
     let func_names = libxc_available_functional_names();
 
