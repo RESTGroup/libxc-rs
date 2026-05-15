@@ -126,11 +126,6 @@ fn validate_cuda_output_ptrs(
     Ok(ptrs)
 }
 
-/// Helper to get a pointer from the validated map, defaulting to null.
-fn ptr_of(ptrs: &HashMap<&'static str, *mut f64>, key: &str) -> *mut f64 {
-    ptrs.get(key).copied().unwrap_or(std::ptr::null_mut())
-}
-
 /// Guard that the functional is initialized for GPU execution.
 fn guard_on_device(func: &LibXCFunctional) -> Result<(), LibXCError> {
     if !func.is_on_device() {
@@ -171,34 +166,6 @@ impl LibXCFunctional {
         Ok((npoints, rho_ptr, layout))
     }
 
-    /// Invoke `xc_lda` FFI call with device pointers.
-    fn cuda_lda_call(
-        &self,
-        npoints: usize,
-        rho_ptr: *const f64,
-        output_base: *mut f64,
-        layout: &LibXCOutputLayout,
-    ) {
-        let ptr_for = |name: &str| -> *mut f64 {
-            match layout.get(name) {
-                Some(range) => unsafe { output_base.add(range.start) },
-                None => std::ptr::null_mut::<f64>(),
-            }
-        };
-        unsafe {
-            ffi::xc_lda(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                ptr_for("zk"),
-                ptr_for("vrho"),
-                ptr_for("v2rho2"),
-                ptr_for("v3rho3"),
-                ptr_for("v4rho4"),
-            );
-        }
-    }
-
     // -- LDA CUDA compute --------------------------------------------------
 
     /// Compute LDA functional on GPU with automatic device allocation.
@@ -217,7 +184,9 @@ impl LibXCFunctional {
             .map_err(|e| LibXCError::CudaError(format!("CUDA allocation failed: {e}")))?;
         {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
-            self.cuda_lda_call(npoints, rho_ptr, output_base as *mut f64, &layout);
+            unsafe {
+                xc_lda_call(self.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
+            }
         }
         Ok((buffer, layout))
     }
@@ -240,7 +209,9 @@ impl LibXCFunctional {
             )));
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
-        self.cuda_lda_call(npoints, rho_ptr, output_base as *mut f64, &layout);
+        unsafe {
+            xc_lda_call(self.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
+        }
         Ok(layout)
     }
 
@@ -267,16 +238,7 @@ impl LibXCFunctional {
         let ptrs = validate_cuda_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, dim, stream)?;
 
         unsafe {
-            ffi::xc_lda(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                ptr_of(&ptrs, "zk"),
-                ptr_of(&ptrs, "vrho"),
-                ptr_of(&ptrs, "v2rho2"),
-                ptr_of(&ptrs, "v3rho3"),
-                ptr_of(&ptrs, "v4rho4"),
-            );
+            xc_lda_call_with_output(self.ptr, npoints, rho_ptr, &ptrs);
         }
         Ok(())
     }
@@ -310,46 +272,6 @@ impl LibXCFunctional {
         Ok((npoints, rho_ptr, sigma_ptr, layout))
     }
 
-    /// Invoke `xc_gga` FFI call with device pointers.
-    fn cuda_gga_call(
-        &self,
-        npoints: usize,
-        rho_ptr: *const f64,
-        sigma_ptr: *const f64,
-        output_base: *mut f64,
-        layout: &LibXCOutputLayout,
-    ) {
-        let ptr_for = |name: &str| -> *mut f64 {
-            match layout.get(name) {
-                Some(range) => unsafe { output_base.add(range.start) },
-                None => std::ptr::null_mut::<f64>(),
-            }
-        };
-        unsafe {
-            ffi::xc_gga(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                sigma_ptr as *mut f64,
-                ptr_for("zk"),
-                ptr_for("vrho"),
-                ptr_for("vsigma"),
-                ptr_for("v2rho2"),
-                ptr_for("v2rhosigma"),
-                ptr_for("v2sigma2"),
-                ptr_for("v3rho3"),
-                ptr_for("v3rho2sigma"),
-                ptr_for("v3rhosigma2"),
-                ptr_for("v3sigma3"),
-                ptr_for("v4rho4"),
-                ptr_for("v4rho3sigma"),
-                ptr_for("v4rho2sigma2"),
-                ptr_for("v4rhosigma3"),
-                ptr_for("v4sigma4"),
-            );
-        }
-    }
-
     // -- GGA CUDA compute --------------------------------------------------
 
     /// Compute GGA functional on GPU with automatic device allocation.
@@ -365,7 +287,16 @@ impl LibXCFunctional {
             .map_err(|e| LibXCError::CudaError(format!("CUDA allocation failed: {e}")))?;
         {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
-            self.cuda_gga_call(npoints, rho_ptr, sigma_ptr, output_base as *mut f64, &layout);
+            unsafe {
+                xc_gga_call(
+                    self.ptr,
+                    npoints,
+                    rho_ptr,
+                    sigma_ptr,
+                    output_base as *mut f64,
+                    &layout,
+                );
+            }
         }
         Ok((buffer, layout))
     }
@@ -389,7 +320,9 @@ impl LibXCFunctional {
             )));
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
-        self.cuda_gga_call(npoints, rho_ptr, sigma_ptr, output_base as *mut f64, &layout);
+        unsafe {
+            xc_gga_call(self.ptr, npoints, rho_ptr, sigma_ptr, output_base as *mut f64, &layout);
+        }
         Ok(layout)
     }
 
@@ -417,27 +350,7 @@ impl LibXCFunctional {
         let ptrs = validate_cuda_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, dim, stream)?;
 
         unsafe {
-            ffi::xc_gga(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                sigma_ptr as *mut f64,
-                ptr_of(&ptrs, "zk"),
-                ptr_of(&ptrs, "vrho"),
-                ptr_of(&ptrs, "vsigma"),
-                ptr_of(&ptrs, "v2rho2"),
-                ptr_of(&ptrs, "v2rhosigma"),
-                ptr_of(&ptrs, "v2sigma2"),
-                ptr_of(&ptrs, "v3rho3"),
-                ptr_of(&ptrs, "v3rho2sigma"),
-                ptr_of(&ptrs, "v3rhosigma2"),
-                ptr_of(&ptrs, "v3sigma3"),
-                ptr_of(&ptrs, "v4rho4"),
-                ptr_of(&ptrs, "v4rho3sigma"),
-                ptr_of(&ptrs, "v4rho2sigma2"),
-                ptr_of(&ptrs, "v4rhosigma3"),
-                ptr_of(&ptrs, "v4sigma4"),
-            );
+            xc_gga_call_with_output(self.ptr, npoints, rho_ptr, sigma_ptr, &ptrs);
         }
         Ok(())
     }
@@ -480,107 +393,6 @@ impl LibXCFunctional {
         Ok((npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout))
     }
 
-    /// Invoke `xc_mgga` FFI call with device pointers.
-    #[allow(clippy::too_many_arguments)]
-    fn cuda_mgga_call(
-        &self,
-        npoints: usize,
-        rho_ptr: *const f64,
-        sigma_ptr: *const f64,
-        lapl_ptr: *const f64,
-        tau_ptr: *const f64,
-        output_base: *mut f64,
-        layout: &LibXCOutputLayout,
-    ) {
-        let ptr_for = |name: &str| -> *mut f64 {
-            match layout.get(name) {
-                Some(range) => unsafe { output_base.add(range.start) },
-                None => std::ptr::null_mut::<f64>(),
-            }
-        };
-
-        unsafe {
-            ffi::xc_mgga(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                sigma_ptr as *mut f64,
-                lapl_ptr as *mut f64,
-                tau_ptr as *mut f64,
-                ptr_for("zk"),
-                ptr_for("vrho"),
-                ptr_for("vsigma"),
-                ptr_for("vlapl"),
-                ptr_for("vtau"),
-                ptr_for("v2rho2"),
-                ptr_for("v2rhosigma"),
-                ptr_for("v2rholapl"),
-                ptr_for("v2rhotau"),
-                ptr_for("v2sigma2"),
-                ptr_for("v2sigmalapl"),
-                ptr_for("v2sigmatau"),
-                ptr_for("v2lapl2"),
-                ptr_for("v2lapltau"),
-                ptr_for("v2tau2"),
-                ptr_for("v3rho3"),
-                ptr_for("v3rho2sigma"),
-                ptr_for("v3rho2lapl"),
-                ptr_for("v3rho2tau"),
-                ptr_for("v3rhosigma2"),
-                ptr_for("v3rhosigmalapl"),
-                ptr_for("v3rhosigmatau"),
-                ptr_for("v3rholapl2"),
-                ptr_for("v3rholapltau"),
-                ptr_for("v3rhotau2"),
-                ptr_for("v3sigma3"),
-                ptr_for("v3sigma2lapl"),
-                ptr_for("v3sigma2tau"),
-                ptr_for("v3sigmalapl2"),
-                ptr_for("v3sigmalapltau"),
-                ptr_for("v3sigmatau2"),
-                ptr_for("v3lapl3"),
-                ptr_for("v3lapl2tau"),
-                ptr_for("v3lapltau2"),
-                ptr_for("v3tau3"),
-                ptr_for("v4rho4"),
-                ptr_for("v4rho3sigma"),
-                ptr_for("v4rho3lapl"),
-                ptr_for("v4rho3tau"),
-                ptr_for("v4rho2sigma2"),
-                ptr_for("v4rho2sigmalapl"),
-                ptr_for("v4rho2sigmatau"),
-                ptr_for("v4rho2lapl2"),
-                ptr_for("v4rho2lapltau"),
-                ptr_for("v4rho2tau2"),
-                ptr_for("v4rhosigma3"),
-                ptr_for("v4rhosigma2lapl"),
-                ptr_for("v4rhosigma2tau"),
-                ptr_for("v4rhosigmalapl2"),
-                ptr_for("v4rhosigmalapltau"),
-                ptr_for("v4rhosigmatau2"),
-                ptr_for("v4rholapl3"),
-                ptr_for("v4rholapl2tau"),
-                ptr_for("v4rholapltau2"),
-                ptr_for("v4rhotau3"),
-                ptr_for("v4sigma4"),
-                ptr_for("v4sigma3lapl"),
-                ptr_for("v4sigma3tau"),
-                ptr_for("v4sigma2lapl2"),
-                ptr_for("v4sigma2lapltau"),
-                ptr_for("v4sigma2tau2"),
-                ptr_for("v4sigmalapl3"),
-                ptr_for("v4sigmalapl2tau"),
-                ptr_for("v4sigmalapltau2"),
-                ptr_for("v4sigmatau3"),
-                ptr_for("v4lapl4"),
-                ptr_for("v4lapl3tau"),
-                ptr_for("v4lapl2tau2"),
-                ptr_for("v4lapltau3"),
-                ptr_for("v4tau4"),
-            );
-        }
-    }
-
     // -- MGGA CUDA compute -------------------------------------------------
 
     /// Compute MGGA functional on GPU with automatic device allocation.
@@ -597,15 +409,18 @@ impl LibXCFunctional {
             .map_err(|e| LibXCError::CudaError(format!("CUDA allocation failed: {e}")))?;
         {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
-            self.cuda_mgga_call(
-                npoints,
-                rho_ptr,
-                sigma_ptr,
-                lapl_ptr,
-                tau_ptr,
-                output_base as *mut f64,
-                &layout,
-            );
+            unsafe {
+                xc_mgga_call(
+                    self.ptr,
+                    npoints,
+                    rho_ptr,
+                    sigma_ptr,
+                    lapl_ptr,
+                    tau_ptr,
+                    output_base as *mut f64,
+                    &layout,
+                );
+            }
         }
         Ok((buffer, layout))
     }
@@ -629,15 +444,18 @@ impl LibXCFunctional {
             )));
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
-        self.cuda_mgga_call(
-            npoints,
-            rho_ptr,
-            sigma_ptr,
-            lapl_ptr,
-            tau_ptr,
-            output_base as *mut f64,
-            &layout,
-        );
+        unsafe {
+            xc_mgga_call(
+                self.ptr,
+                npoints,
+                rho_ptr,
+                sigma_ptr,
+                lapl_ptr,
+                tau_ptr,
+                output_base as *mut f64,
+                &layout,
+            );
+        }
         Ok(layout)
     }
 
@@ -671,83 +489,8 @@ impl LibXCFunctional {
         let ptrs = validate_cuda_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, dim, stream)?;
 
         unsafe {
-            ffi::xc_mgga(
-                self.ptr,
-                npoints,
-                rho_ptr,
-                sigma_ptr as *mut f64,
-                lapl_ptr as *mut f64,
-                tau_ptr as *mut f64,
-                ptr_of(&ptrs, "zk"),
-                ptr_of(&ptrs, "vrho"),
-                ptr_of(&ptrs, "vsigma"),
-                ptr_of(&ptrs, "vlapl"),
-                ptr_of(&ptrs, "vtau"),
-                ptr_of(&ptrs, "v2rho2"),
-                ptr_of(&ptrs, "v2rhosigma"),
-                ptr_of(&ptrs, "v2rholapl"),
-                ptr_of(&ptrs, "v2rhotau"),
-                ptr_of(&ptrs, "v2sigma2"),
-                ptr_of(&ptrs, "v2sigmalapl"),
-                ptr_of(&ptrs, "v2sigmatau"),
-                ptr_of(&ptrs, "v2lapl2"),
-                ptr_of(&ptrs, "v2lapltau"),
-                ptr_of(&ptrs, "v2tau2"),
-                ptr_of(&ptrs, "v3rho3"),
-                ptr_of(&ptrs, "v3rho2sigma"),
-                ptr_of(&ptrs, "v3rho2lapl"),
-                ptr_of(&ptrs, "v3rho2tau"),
-                ptr_of(&ptrs, "v3rhosigma2"),
-                ptr_of(&ptrs, "v3rhosigmalapl"),
-                ptr_of(&ptrs, "v3rhosigmatau"),
-                ptr_of(&ptrs, "v3rholapl2"),
-                ptr_of(&ptrs, "v3rholapltau"),
-                ptr_of(&ptrs, "v3rhotau2"),
-                ptr_of(&ptrs, "v3sigma3"),
-                ptr_of(&ptrs, "v3sigma2lapl"),
-                ptr_of(&ptrs, "v3sigma2tau"),
-                ptr_of(&ptrs, "v3sigmalapl2"),
-                ptr_of(&ptrs, "v3sigmalapltau"),
-                ptr_of(&ptrs, "v3sigmatau2"),
-                ptr_of(&ptrs, "v3lapl3"),
-                ptr_of(&ptrs, "v3lapl2tau"),
-                ptr_of(&ptrs, "v3lapltau2"),
-                ptr_of(&ptrs, "v3tau3"),
-                ptr_of(&ptrs, "v4rho4"),
-                ptr_of(&ptrs, "v4rho3sigma"),
-                ptr_of(&ptrs, "v4rho3lapl"),
-                ptr_of(&ptrs, "v4rho3tau"),
-                ptr_of(&ptrs, "v4rho2sigma2"),
-                ptr_of(&ptrs, "v4rho2sigmalapl"),
-                ptr_of(&ptrs, "v4rho2sigmatau"),
-                ptr_of(&ptrs, "v4rho2lapl2"),
-                ptr_of(&ptrs, "v4rho2lapltau"),
-                ptr_of(&ptrs, "v4rho2tau2"),
-                ptr_of(&ptrs, "v4rhosigma3"),
-                ptr_of(&ptrs, "v4rhosigma2lapl"),
-                ptr_of(&ptrs, "v4rhosigma2tau"),
-                ptr_of(&ptrs, "v4rhosigmalapl2"),
-                ptr_of(&ptrs, "v4rhosigmalapltau"),
-                ptr_of(&ptrs, "v4rhosigmatau2"),
-                ptr_of(&ptrs, "v4rholapl3"),
-                ptr_of(&ptrs, "v4rholapl2tau"),
-                ptr_of(&ptrs, "v4rholapltau2"),
-                ptr_of(&ptrs, "v4rhotau3"),
-                ptr_of(&ptrs, "v4sigma4"),
-                ptr_of(&ptrs, "v4sigma3lapl"),
-                ptr_of(&ptrs, "v4sigma3tau"),
-                ptr_of(&ptrs, "v4sigma2lapl2"),
-                ptr_of(&ptrs, "v4sigma2lapltau"),
-                ptr_of(&ptrs, "v4sigma2tau2"),
-                ptr_of(&ptrs, "v4sigmalapl3"),
-                ptr_of(&ptrs, "v4sigmalapl2tau"),
-                ptr_of(&ptrs, "v4sigmalapltau2"),
-                ptr_of(&ptrs, "v4sigmatau3"),
-                ptr_of(&ptrs, "v4lapl4"),
-                ptr_of(&ptrs, "v4lapl3tau"),
-                ptr_of(&ptrs, "v4lapl2tau2"),
-                ptr_of(&ptrs, "v4lapltau3"),
-                ptr_of(&ptrs, "v4tau4"),
+            xc_mgga_call_with_output(
+                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs,
             );
         }
         Ok(())

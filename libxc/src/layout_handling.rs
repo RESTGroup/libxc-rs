@@ -4,6 +4,8 @@
 
 use crate::prelude::*;
 
+/* #region derivative flags */
+
 /// Flags controlling which derivative levels to compute.
 ///
 /// This struct is somehow cumbersome; but you can also use `usize` levels
@@ -43,7 +45,9 @@ impl From<usize> for LibXCDerivativeFlags {
     }
 }
 
-// -- Output label definitions (mirroring pylibxc output_labels) --------
+/* #endregion */
+
+/* #region Output label definitions (mirroring pylibxc output_labels) */
 
 #[rustfmt::skip]
 pub const LDA_OUTPUT_LABELS: [&str; 5] = [
@@ -177,6 +181,10 @@ pub fn get_dim(dim: &ffi::xc_dimensions, label: &str) -> i32 {
     }
 }
 
+/* #endregion */
+
+/* #region layout handling main part */
+
 /// Mirrors pylibxc's `_check_arrays`: iterates output labels in
 /// `labels[start..end]`, pushing those whose derivative level is
 /// required and whose lapl/tau needs are satisfied.
@@ -288,8 +296,6 @@ impl core::fmt::Display for LibXCOutputLayout {
 }
 
 impl LibXCFunctional {
-    // -- Output layout computation ------------------------------------------
-
     /// Compute the output layout for LDA at a given number of grid points.
     #[rustfmt::skip]
     pub fn lda_output_layout(
@@ -360,8 +366,6 @@ impl LibXCFunctional {
         }
     }
 
-    // -- Validate derivative flags ------------------------------------------
-
     pub(crate) fn validate_flags(
         &self,
         flags: impl Into<LibXCDerivativeFlags>,
@@ -384,3 +388,354 @@ impl LibXCFunctional {
         Ok(())
     }
 }
+
+/* #endregion */
+
+/* #region Shared unsafe FFI call functions (used by both CPU and CUDA paths) */
+
+/// Helper to get a pointer from the validated map, defaulting to null.
+pub(crate) fn ptr_of(ptrs: &HashMap<&'static str, *mut f64>, key: &str) -> *mut f64 {
+    ptrs.get(key).copied().unwrap_or(std::ptr::null_mut())
+}
+
+/// Invoke `xc_lda` FFI call with a contiguous output buffer and layout.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// `rho_ptr` points to at least `npoints * nspin` readable `f64`s, and
+/// `output_base` points to at least `layout.total_size` writable `f64`s.
+pub(crate) unsafe fn xc_lda_call(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    output_base: *mut f64,
+    layout: &LibXCOutputLayout,
+) {
+    let ptr_for = |name: &str| -> *mut f64 {
+        match layout.get(name) {
+            Some(range) => output_base.add(range.start),
+            None => std::ptr::null_mut::<f64>(),
+        }
+    };
+    ffi::xc_lda(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        ptr_for("zk"),
+        ptr_for("vrho"),
+        ptr_for("v2rho2"),
+        ptr_for("v3rho3"),
+        ptr_for("v4rho4"),
+    );
+}
+
+/// Invoke `xc_lda` FFI call with named per-component output pointers.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// `rho_ptr` points to at least `npoints * nspin` readable `f64`s, and each
+/// non-null pointer in `ptrs` points to a buffer of the correct size.
+pub(crate) unsafe fn xc_lda_call_with_output(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    ptrs: &HashMap<&'static str, *mut f64>,
+) {
+    ffi::xc_lda(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        ptr_of(ptrs, "zk"),
+        ptr_of(ptrs, "vrho"),
+        ptr_of(ptrs, "v2rho2"),
+        ptr_of(ptrs, "v3rho3"),
+        ptr_of(ptrs, "v4rho4"),
+    );
+}
+
+/// Invoke `xc_gga` FFI call with a contiguous output buffer and layout.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// input pointers are valid for their expected sizes, and `output_base` points
+/// to at least `layout.total_size` writable `f64`s.
+pub(crate) unsafe fn xc_gga_call(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    sigma_ptr: *const f64,
+    output_base: *mut f64,
+    layout: &LibXCOutputLayout,
+) {
+    let ptr_for = |name: &str| -> *mut f64 {
+        match layout.get(name) {
+            Some(range) => output_base.add(range.start),
+            None => std::ptr::null_mut::<f64>(),
+        }
+    };
+    ffi::xc_gga(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        sigma_ptr as *mut f64,
+        ptr_for("zk"),
+        ptr_for("vrho"),
+        ptr_for("vsigma"),
+        ptr_for("v2rho2"),
+        ptr_for("v2rhosigma"),
+        ptr_for("v2sigma2"),
+        ptr_for("v3rho3"),
+        ptr_for("v3rho2sigma"),
+        ptr_for("v3rhosigma2"),
+        ptr_for("v3sigma3"),
+        ptr_for("v4rho4"),
+        ptr_for("v4rho3sigma"),
+        ptr_for("v4rho2sigma2"),
+        ptr_for("v4rhosigma3"),
+        ptr_for("v4sigma4"),
+    );
+}
+
+/// Invoke `xc_gga` FFI call with named per-component output pointers.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// input pointers are valid for their expected sizes, and each non-null
+/// pointer in `ptrs` points to a buffer of the correct size.
+pub(crate) unsafe fn xc_gga_call_with_output(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    sigma_ptr: *const f64,
+    ptrs: &HashMap<&'static str, *mut f64>,
+) {
+    ffi::xc_gga(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        sigma_ptr as *mut f64,
+        ptr_of(ptrs, "zk"),
+        ptr_of(ptrs, "vrho"),
+        ptr_of(ptrs, "vsigma"),
+        ptr_of(ptrs, "v2rho2"),
+        ptr_of(ptrs, "v2rhosigma"),
+        ptr_of(ptrs, "v2sigma2"),
+        ptr_of(ptrs, "v3rho3"),
+        ptr_of(ptrs, "v3rho2sigma"),
+        ptr_of(ptrs, "v3rhosigma2"),
+        ptr_of(ptrs, "v3sigma3"),
+        ptr_of(ptrs, "v4rho4"),
+        ptr_of(ptrs, "v4rho3sigma"),
+        ptr_of(ptrs, "v4rho2sigma2"),
+        ptr_of(ptrs, "v4rhosigma3"),
+        ptr_of(ptrs, "v4sigma4"),
+    );
+}
+
+/// Invoke `xc_mgga` FFI call with a contiguous output buffer and layout.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// input pointers are valid for their expected sizes, and `output_base` points
+/// to at least `layout.total_size` writable `f64`s.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn xc_mgga_call(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    sigma_ptr: *const f64,
+    lapl_ptr: *const f64,
+    tau_ptr: *const f64,
+    output_base: *mut f64,
+    layout: &LibXCOutputLayout,
+) {
+    let ptr_for = |name: &str| -> *mut f64 {
+        match layout.get(name) {
+            Some(range) => output_base.add(range.start),
+            None => std::ptr::null_mut::<f64>(),
+        }
+    };
+
+    ffi::xc_mgga(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        sigma_ptr as *mut f64,
+        lapl_ptr as *mut f64,
+        tau_ptr as *mut f64,
+        ptr_for("zk"),
+        ptr_for("vrho"),
+        ptr_for("vsigma"),
+        ptr_for("vlapl"),
+        ptr_for("vtau"),
+        ptr_for("v2rho2"),
+        ptr_for("v2rhosigma"),
+        ptr_for("v2rholapl"),
+        ptr_for("v2rhotau"),
+        ptr_for("v2sigma2"),
+        ptr_for("v2sigmalapl"),
+        ptr_for("v2sigmatau"),
+        ptr_for("v2lapl2"),
+        ptr_for("v2lapltau"),
+        ptr_for("v2tau2"),
+        ptr_for("v3rho3"),
+        ptr_for("v3rho2sigma"),
+        ptr_for("v3rho2lapl"),
+        ptr_for("v3rho2tau"),
+        ptr_for("v3rhosigma2"),
+        ptr_for("v3rhosigmalapl"),
+        ptr_for("v3rhosigmatau"),
+        ptr_for("v3rholapl2"),
+        ptr_for("v3rholapltau"),
+        ptr_for("v3rhotau2"),
+        ptr_for("v3sigma3"),
+        ptr_for("v3sigma2lapl"),
+        ptr_for("v3sigma2tau"),
+        ptr_for("v3sigmalapl2"),
+        ptr_for("v3sigmalapltau"),
+        ptr_for("v3sigmatau2"),
+        ptr_for("v3lapl3"),
+        ptr_for("v3lapl2tau"),
+        ptr_for("v3lapltau2"),
+        ptr_for("v3tau3"),
+        ptr_for("v4rho4"),
+        ptr_for("v4rho3sigma"),
+        ptr_for("v4rho3lapl"),
+        ptr_for("v4rho3tau"),
+        ptr_for("v4rho2sigma2"),
+        ptr_for("v4rho2sigmalapl"),
+        ptr_for("v4rho2sigmatau"),
+        ptr_for("v4rho2lapl2"),
+        ptr_for("v4rho2lapltau"),
+        ptr_for("v4rho2tau2"),
+        ptr_for("v4rhosigma3"),
+        ptr_for("v4rhosigma2lapl"),
+        ptr_for("v4rhosigma2tau"),
+        ptr_for("v4rhosigmalapl2"),
+        ptr_for("v4rhosigmalapltau"),
+        ptr_for("v4rhosigmatau2"),
+        ptr_for("v4rholapl3"),
+        ptr_for("v4rholapl2tau"),
+        ptr_for("v4rholapltau2"),
+        ptr_for("v4rhotau3"),
+        ptr_for("v4sigma4"),
+        ptr_for("v4sigma3lapl"),
+        ptr_for("v4sigma3tau"),
+        ptr_for("v4sigma2lapl2"),
+        ptr_for("v4sigma2lapltau"),
+        ptr_for("v4sigma2tau2"),
+        ptr_for("v4sigmalapl3"),
+        ptr_for("v4sigmalapl2tau"),
+        ptr_for("v4sigmalapltau2"),
+        ptr_for("v4sigmatau3"),
+        ptr_for("v4lapl4"),
+        ptr_for("v4lapl3tau"),
+        ptr_for("v4lapl2tau2"),
+        ptr_for("v4lapltau3"),
+        ptr_for("v4tau4"),
+    );
+}
+
+/// Invoke `xc_mgga` FFI call with named per-component output pointers.
+///
+/// # Safety
+///
+/// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
+/// input pointers are valid for their expected sizes, and each non-null
+/// pointer in `ptrs` points to a buffer of the correct size.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn xc_mgga_call_with_output(
+    func_ptr: *mut ffi::xc_func_type,
+    npoints: usize,
+    rho_ptr: *const f64,
+    sigma_ptr: *const f64,
+    lapl_ptr: *const f64,
+    tau_ptr: *const f64,
+    ptrs: &HashMap<&'static str, *mut f64>,
+) {
+    ffi::xc_mgga(
+        func_ptr,
+        npoints,
+        rho_ptr,
+        sigma_ptr as *mut f64,
+        lapl_ptr as *mut f64,
+        tau_ptr as *mut f64,
+        ptr_of(ptrs, "zk"),
+        ptr_of(ptrs, "vrho"),
+        ptr_of(ptrs, "vsigma"),
+        ptr_of(ptrs, "vlapl"),
+        ptr_of(ptrs, "vtau"),
+        ptr_of(ptrs, "v2rho2"),
+        ptr_of(ptrs, "v2rhosigma"),
+        ptr_of(ptrs, "v2rholapl"),
+        ptr_of(ptrs, "v2rhotau"),
+        ptr_of(ptrs, "v2sigma2"),
+        ptr_of(ptrs, "v2sigmalapl"),
+        ptr_of(ptrs, "v2sigmatau"),
+        ptr_of(ptrs, "v2lapl2"),
+        ptr_of(ptrs, "v2lapltau"),
+        ptr_of(ptrs, "v2tau2"),
+        ptr_of(ptrs, "v3rho3"),
+        ptr_of(ptrs, "v3rho2sigma"),
+        ptr_of(ptrs, "v3rho2lapl"),
+        ptr_of(ptrs, "v3rho2tau"),
+        ptr_of(ptrs, "v3rhosigma2"),
+        ptr_of(ptrs, "v3rhosigmalapl"),
+        ptr_of(ptrs, "v3rhosigmatau"),
+        ptr_of(ptrs, "v3rholapl2"),
+        ptr_of(ptrs, "v3rholapltau"),
+        ptr_of(ptrs, "v3rhotau2"),
+        ptr_of(ptrs, "v3sigma3"),
+        ptr_of(ptrs, "v3sigma2lapl"),
+        ptr_of(ptrs, "v3sigma2tau"),
+        ptr_of(ptrs, "v3sigmalapl2"),
+        ptr_of(ptrs, "v3sigmalapltau"),
+        ptr_of(ptrs, "v3sigmatau2"),
+        ptr_of(ptrs, "v3lapl3"),
+        ptr_of(ptrs, "v3lapl2tau"),
+        ptr_of(ptrs, "v3lapltau2"),
+        ptr_of(ptrs, "v3tau3"),
+        ptr_of(ptrs, "v4rho4"),
+        ptr_of(ptrs, "v4rho3sigma"),
+        ptr_of(ptrs, "v4rho3lapl"),
+        ptr_of(ptrs, "v4rho3tau"),
+        ptr_of(ptrs, "v4rho2sigma2"),
+        ptr_of(ptrs, "v4rho2sigmalapl"),
+        ptr_of(ptrs, "v4rho2sigmatau"),
+        ptr_of(ptrs, "v4rho2lapl2"),
+        ptr_of(ptrs, "v4rho2lapltau"),
+        ptr_of(ptrs, "v4rho2tau2"),
+        ptr_of(ptrs, "v4rhosigma3"),
+        ptr_of(ptrs, "v4rhosigma2lapl"),
+        ptr_of(ptrs, "v4rhosigma2tau"),
+        ptr_of(ptrs, "v4rhosigmalapl2"),
+        ptr_of(ptrs, "v4rhosigmalapltau"),
+        ptr_of(ptrs, "v4rhosigmatau2"),
+        ptr_of(ptrs, "v4rholapl3"),
+        ptr_of(ptrs, "v4rholapl2tau"),
+        ptr_of(ptrs, "v4rholapltau2"),
+        ptr_of(ptrs, "v4rhotau3"),
+        ptr_of(ptrs, "v4sigma4"),
+        ptr_of(ptrs, "v4sigma3lapl"),
+        ptr_of(ptrs, "v4sigma3tau"),
+        ptr_of(ptrs, "v4sigma2lapl2"),
+        ptr_of(ptrs, "v4sigma2lapltau"),
+        ptr_of(ptrs, "v4sigma2tau2"),
+        ptr_of(ptrs, "v4sigmalapl3"),
+        ptr_of(ptrs, "v4sigmalapl2tau"),
+        ptr_of(ptrs, "v4sigmalapltau2"),
+        ptr_of(ptrs, "v4sigmatau3"),
+        ptr_of(ptrs, "v4lapl4"),
+        ptr_of(ptrs, "v4lapl3tau"),
+        ptr_of(ptrs, "v4lapl2tau2"),
+        ptr_of(ptrs, "v4lapltau3"),
+        ptr_of(ptrs, "v4tau4"),
+    );
+}
+
+/* #endregion */
