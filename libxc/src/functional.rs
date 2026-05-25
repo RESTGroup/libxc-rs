@@ -121,9 +121,18 @@ pub struct LibXCReference {
 /// [`compute_xc_with_unsliced_output`]: Self::compute_xc_with_unsliced_output
 /// [`compute_xc_with_output`]: Self::compute_xc_with_output
 /// [`LibXCOutputLayout`]: crate::layout_handling::LibXCOutputLayout
+///
+/// # Notes on parallel
+///
+/// This struct is made to be [`Sync`] and [`Send`] available. But note we have
+/// not assured safety, so not to abuse them. Using send and sync for xc
+/// computation is probably okay.
 pub struct LibXCFunctional {
     pub(crate) ptr: *mut ffi::xc_func_type,
 }
+
+unsafe impl Send for LibXCFunctional {}
+unsafe impl Sync for LibXCFunctional {}
 
 /// Creation functions implementation.
 impl LibXCFunctional {
