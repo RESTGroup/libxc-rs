@@ -235,7 +235,7 @@ impl LibXCOutputLayout {
         }
         let size = self.npoints * (n_comp as usize);
         let offset = self.total_size;
-        self.components.insert(name, (offset, size));
+        self.components.insert(name, (offset, n_comp as usize));
         self.total_size += size;
     }
 
