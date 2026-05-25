@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.2 -- 2026-05-25
+
+Enhancement:
+
+- Enhance to layout handling
+  - use IndexMap instead of Vec for storing components
+  - make `components` field public
+  - add method `iter_to_range`
+
+- Docsrs features updated
+
+- Add Send and Sync to `LibXCFunctional`.
+
 ## v0.1.1 -- 2026-05-15
 
 Enhancement:

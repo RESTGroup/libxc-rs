@@ -7,7 +7,7 @@ members = [
 [workspace.package]
 edition = "2021"
 rust-version = "1.82"
-version = "0.1.1"
+version = "0.1.2"
 description = "libxc FFI bindings and wrappers"
 repository = "https://github.com/RESTGroup/libxc-rs"
 keywords = ["ffi", "chemistry"]
@@ -15,4 +15,4 @@ categories = ["science"]
 license = "Apache-2.0"
 
 [workspace.dependencies]
-libxc-ffi = { path = "libxc-ffi", version = "0.1.1" }
+libxc-ffi = { path = "libxc-ffi", version = "0.1.2" }
