@@ -23,6 +23,8 @@
 //!   created with
 //!   [`from_identifier_with_device`](LibXCFunctional::from_identifier_with_device).
 #![doc = include_str!("../readme.md")]
+#![cfg_attr(docsrs, feature(doc_cfg, rustdoc_internals))]
+#![cfg_attr(docsrs, allow(internal_features))]
 
 pub mod enums;
 pub mod error;
