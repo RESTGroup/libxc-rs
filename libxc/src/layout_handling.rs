@@ -220,12 +220,13 @@ pub struct LibXCOutputLayout {
     pub total_size: usize,
     /// Number of grid points.
     pub npoints: usize,
-    components: Vec<(&'static str, usize, usize)>, // (name, offset, size)
+    /// List of components in the layout (name, offset, n_comp).
+    pub components: IndexMap<&'static str, (usize, usize)>,
 }
 
 impl LibXCOutputLayout {
     fn new(npoints: usize) -> Self {
-        Self { total_size: 0, npoints, components: Vec::new() }
+        Self { total_size: 0, npoints, components: IndexMap::new() }
     }
 
     fn push(&mut self, name: &'static str, n_comp: i32) {
@@ -234,45 +235,37 @@ impl LibXCOutputLayout {
         }
         let size = self.npoints * (n_comp as usize);
         let offset = self.total_size;
-        self.components.push((name, offset, size));
+        self.components.insert(name, (offset, size));
         self.total_size += size;
     }
 
     /// Returns the byte range `[offset .. offset + size)` for a named
     /// component.
     pub fn get(&self, name: &str) -> Option<Range<usize>> {
-        for &(n, offset, size) in &self.components {
-            if n == name {
-                return Some(offset..offset + size);
-            }
-        }
-        None
+        self.components.get(name).map(|&(offset, n_comp)| offset..offset + n_comp * self.npoints)
     }
 
     /// Iterates over component names in order.
     pub fn component_names(&self) -> impl Iterator<Item = &str> {
-        self.components.iter().map(|&(n, _, _)| n)
+        self.components.keys().copied()
     }
 
     /// Returns the size (in f64 elements) for a named component.
     pub fn component_size(&self, name: &str) -> Option<usize> {
-        for &(n, _, size) in &self.components {
-            if n == name {
-                return Some(size);
-            }
-        }
-        None
+        self.components.get(name).map(|&(_, n_comp)| n_comp * self.npoints)
     }
 
     /// Returns the number of components (not grid points) for a named
     /// component.
     pub fn component_dim(&self, name: &str) -> Option<usize> {
-        for &(n, _, size) in &self.components {
-            if n == name {
-                return Some(size / self.npoints);
-            }
-        }
-        None
+        self.components.get(name).map(|&(_, n_comp)| n_comp)
+    }
+
+    /// Iterates over components as (name, range) pairs.
+    pub fn iter_to_range(&self) -> impl Iterator<Item = (&str, Range<usize>)> {
+        self.components
+            .iter()
+            .map(|(&name, &(offset, n_comp))| (name, offset..offset + n_comp * self.npoints))
     }
 }
 
@@ -283,12 +276,13 @@ impl core::fmt::Display for LibXCOutputLayout {
             "LibXCOutputLayout (total_size={}, npoints={}):",
             self.total_size, self.npoints
         )?;
-        for &(name, offset, size) in &self.components {
+        for (name, (offset, n_comp)) in self.components.iter() {
             writeln!(
                 f,
-                "  {name}: [{offset}..{}], size={size}, dim={}",
-                offset + size,
-                size / self.npoints
+                "  {name}: [{offset}..{}], size={}, dim={}",
+                offset + n_comp * self.npoints,
+                n_comp * self.npoints,
+                n_comp
             )?;
         }
         Ok(())
