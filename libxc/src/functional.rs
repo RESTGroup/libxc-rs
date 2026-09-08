@@ -534,8 +534,20 @@ impl LibXCFunctional {
     /// # PyLibxc counterpart
     ///
     /// `LibXCFunctional._needs_tau`
+    ///
+    /// # Notes
+    ///
+    /// `XC_FLAGS_NEEDS_TAU` was introduced in libxc v7.0. When loading an
+    /// older (v6.2.x) library, the flag is never reported, but those versions
+    /// still read tau for every meta-GGA functional and pylibxc 6.2.2
+    /// likewise treats tau as always required for mGGAs. For such libraries
+    /// this method therefore falls back to the functional family.
     pub fn needs_tau(&self) -> bool {
-        self.has_flag(LibXCFlags::NeedsTau)
+        if crate::util::libxc_version().0 < 7 {
+            matches!(self.family(), LibXCFamily::MGGA | LibXCFamily::HybMGGA)
+        } else {
+            self.has_flag(LibXCFlags::NeedsTau)
+        }
     }
 
     /// Whether this is a CAM range-separated hybrid.

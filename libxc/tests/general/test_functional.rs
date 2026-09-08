@@ -115,7 +115,10 @@ fn test_libxc_functional_info() {
     assert!(func.flags().contains(Dim3));
     assert!(func.is_hyb_cam());
     assert!(func.flags().contains(VV10));
-    assert!(func.needs_tau());
+    // XC_FLAGS_NEEDS_TAU was introduced in libxc v7.0; v6.2.x never reports it
+    if libxc_version().0 >= 7 {
+        assert!(func.needs_tau());
+    }
     assert_eq!(func.references().len(), 1);
 }
 

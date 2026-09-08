@@ -15,4 +15,10 @@ categories = ["science"]
 license = "Apache-2.0"
 
 [workspace.dependencies]
-libxc-ffi = { path = "libxc-ffi", version = "0.1.2" }
+# default-features = false: the api-version features (api-v6_2/v7_0/v7_1) and
+# dynamic_loading must be selected exclusively through the `libxc` crate's
+# features. Otherwise libxc-ffi's own defaults (api-v7_0 + dynamic_loading)
+# are always unified in, and e.g. `--features api-v6_2` would still compile
+# the v7.0 struct layout of `xc_func_type` — which reads out of bounds when
+# a v6.2.2 shared library is loaded at runtime.
+libxc-ffi = { path = "libxc-ffi", version = "0.1.2", default-features = false }

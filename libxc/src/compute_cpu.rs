@@ -114,6 +114,16 @@ fn validate_output_ptrs(
     Ok(ptrs)
 }
 
+/// Zeroed scratch buffer for a conditionally-required mGGA input.
+///
+/// libxc 6.2.x reads the tau input array for every meta-GGA functional (the
+/// `XC_FLAGS_NEEDS_TAU` guard only exists in v7.0+), so a null pointer there
+/// would crash the process. Zeroed scratch keeps v6.2.x working; v7.0+
+/// functionals that do not need tau simply never read it.
+fn input_scratch(dim_value: i32, npoints: usize) -> Vec<f64> {
+    vec![0.0; (dim_value.max(0) as usize) * npoints]
+}
+
 impl LibXCFunctional {
     // -- LDA private helpers -----------------------------------------------
 
@@ -352,6 +362,12 @@ impl LibXCFunctional {
                 output.len()
             )));
         }
+        let dim = self.dim();
+        let lapl_scratch = input_scratch(dim.lapl, npoints);
+        let tau_scratch = input_scratch(dim.tau, npoints);
+        let lapl_ptr = if lapl_ptr.is_null() { lapl_scratch.as_ptr() } else { lapl_ptr };
+        let tau_ptr = if tau_ptr.is_null() { tau_scratch.as_ptr() } else { tau_ptr };
+        let (_scratch_bufs, extra) = crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
                 self.ptr,
@@ -362,6 +378,7 @@ impl LibXCFunctional {
                 tau_ptr,
                 output.as_mut_ptr(),
                 &layout,
+                &extra,
             );
         }
         Ok(layout)
@@ -382,6 +399,12 @@ impl LibXCFunctional {
         let (npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, layout) =
             self.mgga_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
+        let dim = self.dim();
+        let lapl_scratch = input_scratch(dim.lapl, npoints);
+        let tau_scratch = input_scratch(dim.tau, npoints);
+        let lapl_ptr = if lapl_ptr.is_null() { lapl_scratch.as_ptr() } else { lapl_ptr };
+        let tau_ptr = if tau_ptr.is_null() { tau_scratch.as_ptr() } else { tau_ptr };
+        let (_scratch_bufs, extra) = crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
                 self.ptr,
@@ -392,6 +415,7 @@ impl LibXCFunctional {
                 tau_ptr,
                 buffer.as_mut_ptr(),
                 &layout,
+                &extra,
             );
         }
         Ok((buffer, layout))
@@ -419,10 +443,16 @@ impl LibXCFunctional {
         let lapl_ptr = conditional_input_ptr(input, "lapl", npoints, dim.lapl, needs_lapl)?;
         let tau_ptr = conditional_input_ptr(input, "tau", npoints, dim.tau, needs_tau)?;
         let ptrs = validate_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, dim)?;
+        let lapl_scratch = input_scratch(dim.lapl, npoints);
+        let tau_scratch = input_scratch(dim.tau, npoints);
+        let lapl_ptr = if lapl_ptr.is_null() { lapl_scratch.as_ptr() } else { lapl_ptr };
+        let tau_ptr = if tau_ptr.is_null() { tau_scratch.as_ptr() } else { tau_ptr };
+        let (_scratch_bufs, extra) =
+            crate::layout_handling::mgga_tau_scratch_from_ptrs(&ptrs, dim, npoints);
 
         unsafe {
             xc_mgga_call_with_output(
-                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs,
+                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs, &extra,
             );
         }
         Ok(())

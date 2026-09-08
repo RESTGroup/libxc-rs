@@ -530,13 +530,96 @@ pub(crate) unsafe fn xc_gga_call_with_output(
     );
 }
 
+/// Extra output pointers for mGGA labels absent from the layout or pointer
+/// map.
+///
+/// libxc 6.2.x unconditionally requires every tau-family output buffer of a
+/// requested derivative order to be non-NULL, even when the functional does
+/// not use tau (the `XC_FLAGS_NEEDS_TAU` flag was only introduced in v7.0),
+/// and it also reads the tau input array for every meta-GGA functional.
+/// Passing null pointers there makes libxc abort the whole process
+/// (`xc_mgga_sanity_check` calls `exit(1)`).
+///
+/// The CPU wrapper therefore allocates zeroed scratch buffers for those
+/// labels and passes their pointers here. Device-side (CUDA) callers can
+/// pass an empty map: libxc 6.2.x has no GPU support at all, and v7.0+ only
+/// requires tau-family buffers when the functional actually needs them.
+pub(crate) type MggaExtraPtrs = HashMap<&'static str, *mut f64>;
+
+/// Build zeroed scratch buffers for the tau-family output labels of every
+/// requested derivative order.
+///
+/// `present` reports whether an output label will be passed to libxc (either
+/// inside the contiguous output buffer or as a dedicated pointer). A
+/// tau-family label is only scratched when the primary output of its
+/// derivative order is requested; libxc only validates tau-family buffers
+/// for the orders that are actually computed.
+fn mgga_tau_scratch_impl(
+    present: &impl Fn(&str) -> bool,
+    dim: &ffi::xc_dimensions,
+    npoints: usize,
+) -> (Vec<Vec<f64>>, MggaExtraPtrs) {
+    const MGGA_ORDER_PRIMARY: [(&str, usize, usize); 5] = [
+        ("zk", 0, MGGA_EXC_END),
+        ("vrho", MGGA_EXC_END, MGGA_VXC_END),
+        ("v2rho2", MGGA_VXC_END, MGGA_FXC_END),
+        ("v3rho3", MGGA_FXC_END, MGGA_KXC_END),
+        ("v4rho4", MGGA_KXC_END, MGGA_LXC_END),
+    ];
+    let mut bufs = Vec::new();
+    let mut ptrs = HashMap::new();
+    for (primary, start, end) in MGGA_ORDER_PRIMARY {
+        if !present(primary) {
+            continue;
+        }
+        for &label in &MGGA_OUTPUT_LABELS[start..end] {
+            if label.contains("tau") && !present(label) {
+                let d = get_dim(dim, label);
+                if d > 0 {
+                    bufs.push(vec![0.0f64; (d as usize) * npoints]);
+                    ptrs.insert(label, bufs.last().unwrap().as_ptr() as *mut f64);
+                }
+            }
+        }
+    }
+    (bufs, ptrs)
+}
+
+/// Build zeroed scratch buffers for tau-family outputs missing from a
+/// contiguous output buffer layout.
+pub(crate) fn mgga_tau_scratch(
+    layout: &LibXCOutputLayout,
+    dim: &ffi::xc_dimensions,
+    npoints: usize,
+) -> (Vec<Vec<f64>>, MggaExtraPtrs) {
+    mgga_tau_scratch_impl(&|label| layout.get(label).is_some(), dim, npoints)
+}
+
+/// Build zeroed scratch buffers for tau-family outputs missing from a
+/// named-pointer map.
+///
+/// The map may contain null pointers for labels the user did not provide
+/// (see `validate_output_ptrs`); only non-null entries count as present.
+pub(crate) fn mgga_tau_scratch_from_ptrs(
+    ptrs: &HashMap<&'static str, *mut f64>,
+    dim: &ffi::xc_dimensions,
+    npoints: usize,
+) -> (Vec<Vec<f64>>, MggaExtraPtrs) {
+    mgga_tau_scratch_impl(&|label| ptrs.get(label).is_some_and(|p| !p.is_null()), dim, npoints)
+}
+
 /// Invoke `xc_mgga` FFI call with a contiguous output buffer and layout.
+///
+/// `extra` supplies output pointers for labels not covered by `layout`
+/// (scratch buffers for libxc 6.2.x; see [`MggaExtraPtrs`]).
 ///
 /// # Safety
 ///
 /// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
 /// input pointers are valid for their expected sizes, and `output_base` points
-/// to at least `layout.total_size` writable `f64`s.
+/// to at least `layout.total_size` writable `f64`s. Pointers in `extra` must
+/// be valid for `get_dim(dim, label) * npoints` writable `f64`s and outlive
+/// the call.
 #[allow(clippy::too_many_arguments)]
 pub(crate) unsafe fn xc_mgga_call(
     func_ptr: *mut ffi::xc_func_type,
@@ -547,10 +630,14 @@ pub(crate) unsafe fn xc_mgga_call(
     tau_ptr: *const f64,
     output_base: *mut f64,
     layout: &LibXCOutputLayout,
+    extra: &MggaExtraPtrs,
 ) {
     let ptr_for = |name: &str| -> *mut f64 {
-        match layout.get(name) {
-            Some(range) => output_base.add(range.start),
+        if let Some(range) = layout.get(name) {
+            return output_base.add(range.start);
+        }
+        match extra.get(name) {
+            Some(&ptr) => ptr,
             None => std::ptr::null_mut::<f64>(),
         }
     };
@@ -637,11 +724,16 @@ pub(crate) unsafe fn xc_mgga_call(
 
 /// Invoke `xc_mgga` FFI call with named per-component output pointers.
 ///
+/// `extra` supplies output pointers for labels not covered by `ptrs`
+/// (scratch buffers for libxc 6.2.x; see [`MggaExtraPtrs`]).
+///
 /// # Safety
 ///
 /// The caller must ensure that `func_ptr` is a valid `xc_func_type` pointer,
 /// input pointers are valid for their expected sizes, and each non-null
-/// pointer in `ptrs` points to a buffer of the correct size.
+/// pointer in `ptrs` points to a buffer of the correct size. Pointers in
+/// `extra` must be valid for `get_dim(dim, label) * npoints` writable `f64`s
+/// and outlive the call.
 #[allow(clippy::too_many_arguments)]
 pub(crate) unsafe fn xc_mgga_call_with_output(
     func_ptr: *mut ffi::xc_func_type,
@@ -651,7 +743,14 @@ pub(crate) unsafe fn xc_mgga_call_with_output(
     lapl_ptr: *const f64,
     tau_ptr: *const f64,
     ptrs: &HashMap<&'static str, *mut f64>,
+    extra: &MggaExtraPtrs,
 ) {
+    let ptr_of_either = |name: &str| -> *mut f64 {
+        match ptrs.get(name) {
+            Some(&ptr) if !ptr.is_null() => ptr,
+            _ => extra.get(name).copied().unwrap_or(std::ptr::null_mut()),
+        }
+    };
     ffi::xc_mgga(
         func_ptr,
         npoints,
@@ -659,76 +758,76 @@ pub(crate) unsafe fn xc_mgga_call_with_output(
         sigma_ptr as *mut f64,
         lapl_ptr as *mut f64,
         tau_ptr as *mut f64,
-        ptr_of(ptrs, "zk"),
-        ptr_of(ptrs, "vrho"),
-        ptr_of(ptrs, "vsigma"),
-        ptr_of(ptrs, "vlapl"),
-        ptr_of(ptrs, "vtau"),
-        ptr_of(ptrs, "v2rho2"),
-        ptr_of(ptrs, "v2rhosigma"),
-        ptr_of(ptrs, "v2rholapl"),
-        ptr_of(ptrs, "v2rhotau"),
-        ptr_of(ptrs, "v2sigma2"),
-        ptr_of(ptrs, "v2sigmalapl"),
-        ptr_of(ptrs, "v2sigmatau"),
-        ptr_of(ptrs, "v2lapl2"),
-        ptr_of(ptrs, "v2lapltau"),
-        ptr_of(ptrs, "v2tau2"),
-        ptr_of(ptrs, "v3rho3"),
-        ptr_of(ptrs, "v3rho2sigma"),
-        ptr_of(ptrs, "v3rho2lapl"),
-        ptr_of(ptrs, "v3rho2tau"),
-        ptr_of(ptrs, "v3rhosigma2"),
-        ptr_of(ptrs, "v3rhosigmalapl"),
-        ptr_of(ptrs, "v3rhosigmatau"),
-        ptr_of(ptrs, "v3rholapl2"),
-        ptr_of(ptrs, "v3rholapltau"),
-        ptr_of(ptrs, "v3rhotau2"),
-        ptr_of(ptrs, "v3sigma3"),
-        ptr_of(ptrs, "v3sigma2lapl"),
-        ptr_of(ptrs, "v3sigma2tau"),
-        ptr_of(ptrs, "v3sigmalapl2"),
-        ptr_of(ptrs, "v3sigmalapltau"),
-        ptr_of(ptrs, "v3sigmatau2"),
-        ptr_of(ptrs, "v3lapl3"),
-        ptr_of(ptrs, "v3lapl2tau"),
-        ptr_of(ptrs, "v3lapltau2"),
-        ptr_of(ptrs, "v3tau3"),
-        ptr_of(ptrs, "v4rho4"),
-        ptr_of(ptrs, "v4rho3sigma"),
-        ptr_of(ptrs, "v4rho3lapl"),
-        ptr_of(ptrs, "v4rho3tau"),
-        ptr_of(ptrs, "v4rho2sigma2"),
-        ptr_of(ptrs, "v4rho2sigmalapl"),
-        ptr_of(ptrs, "v4rho2sigmatau"),
-        ptr_of(ptrs, "v4rho2lapl2"),
-        ptr_of(ptrs, "v4rho2lapltau"),
-        ptr_of(ptrs, "v4rho2tau2"),
-        ptr_of(ptrs, "v4rhosigma3"),
-        ptr_of(ptrs, "v4rhosigma2lapl"),
-        ptr_of(ptrs, "v4rhosigma2tau"),
-        ptr_of(ptrs, "v4rhosigmalapl2"),
-        ptr_of(ptrs, "v4rhosigmalapltau"),
-        ptr_of(ptrs, "v4rhosigmatau2"),
-        ptr_of(ptrs, "v4rholapl3"),
-        ptr_of(ptrs, "v4rholapl2tau"),
-        ptr_of(ptrs, "v4rholapltau2"),
-        ptr_of(ptrs, "v4rhotau3"),
-        ptr_of(ptrs, "v4sigma4"),
-        ptr_of(ptrs, "v4sigma3lapl"),
-        ptr_of(ptrs, "v4sigma3tau"),
-        ptr_of(ptrs, "v4sigma2lapl2"),
-        ptr_of(ptrs, "v4sigma2lapltau"),
-        ptr_of(ptrs, "v4sigma2tau2"),
-        ptr_of(ptrs, "v4sigmalapl3"),
-        ptr_of(ptrs, "v4sigmalapl2tau"),
-        ptr_of(ptrs, "v4sigmalapltau2"),
-        ptr_of(ptrs, "v4sigmatau3"),
-        ptr_of(ptrs, "v4lapl4"),
-        ptr_of(ptrs, "v4lapl3tau"),
-        ptr_of(ptrs, "v4lapl2tau2"),
-        ptr_of(ptrs, "v4lapltau3"),
-        ptr_of(ptrs, "v4tau4"),
+        ptr_of_either("zk"),
+        ptr_of_either("vrho"),
+        ptr_of_either("vsigma"),
+        ptr_of_either("vlapl"),
+        ptr_of_either("vtau"),
+        ptr_of_either("v2rho2"),
+        ptr_of_either("v2rhosigma"),
+        ptr_of_either("v2rholapl"),
+        ptr_of_either("v2rhotau"),
+        ptr_of_either("v2sigma2"),
+        ptr_of_either("v2sigmalapl"),
+        ptr_of_either("v2sigmatau"),
+        ptr_of_either("v2lapl2"),
+        ptr_of_either("v2lapltau"),
+        ptr_of_either("v2tau2"),
+        ptr_of_either("v3rho3"),
+        ptr_of_either("v3rho2sigma"),
+        ptr_of_either("v3rho2lapl"),
+        ptr_of_either("v3rho2tau"),
+        ptr_of_either("v3rhosigma2"),
+        ptr_of_either("v3rhosigmalapl"),
+        ptr_of_either("v3rhosigmatau"),
+        ptr_of_either("v3rholapl2"),
+        ptr_of_either("v3rholapltau"),
+        ptr_of_either("v3rhotau2"),
+        ptr_of_either("v3sigma3"),
+        ptr_of_either("v3sigma2lapl"),
+        ptr_of_either("v3sigma2tau"),
+        ptr_of_either("v3sigmalapl2"),
+        ptr_of_either("v3sigmalapltau"),
+        ptr_of_either("v3sigmatau2"),
+        ptr_of_either("v3lapl3"),
+        ptr_of_either("v3lapl2tau"),
+        ptr_of_either("v3lapltau2"),
+        ptr_of_either("v3tau3"),
+        ptr_of_either("v4rho4"),
+        ptr_of_either("v4rho3sigma"),
+        ptr_of_either("v4rho3lapl"),
+        ptr_of_either("v4rho3tau"),
+        ptr_of_either("v4rho2sigma2"),
+        ptr_of_either("v4rho2sigmalapl"),
+        ptr_of_either("v4rho2sigmatau"),
+        ptr_of_either("v4rho2lapl2"),
+        ptr_of_either("v4rho2lapltau"),
+        ptr_of_either("v4rho2tau2"),
+        ptr_of_either("v4rhosigma3"),
+        ptr_of_either("v4rhosigma2lapl"),
+        ptr_of_either("v4rhosigma2tau"),
+        ptr_of_either("v4rhosigmalapl2"),
+        ptr_of_either("v4rhosigmalapltau"),
+        ptr_of_either("v4rhosigmatau2"),
+        ptr_of_either("v4rholapl3"),
+        ptr_of_either("v4rholapl2tau"),
+        ptr_of_either("v4rholapltau2"),
+        ptr_of_either("v4rhotau3"),
+        ptr_of_either("v4sigma4"),
+        ptr_of_either("v4sigma3lapl"),
+        ptr_of_either("v4sigma3tau"),
+        ptr_of_either("v4sigma2lapl2"),
+        ptr_of_either("v4sigma2lapltau"),
+        ptr_of_either("v4sigma2tau2"),
+        ptr_of_either("v4sigmalapl3"),
+        ptr_of_either("v4sigmalapl2tau"),
+        ptr_of_either("v4sigmalapltau2"),
+        ptr_of_either("v4sigmatau3"),
+        ptr_of_either("v4lapl4"),
+        ptr_of_either("v4lapl3tau"),
+        ptr_of_either("v4lapl2tau2"),
+        ptr_of_either("v4lapltau3"),
+        ptr_of_either("v4tau4"),
     );
 }
 
