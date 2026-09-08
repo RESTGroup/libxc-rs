@@ -617,12 +617,6 @@ pub enum XcFuncId {
     MGGA_X_RTPSS = 299,
     /// MS2beta exchange of Furness and Sun
     MGGA_X_MS2B = 300,
-    /// MS2beta* exchange of Furness and Sun
-    MGGA_X_MS2BS = 301,
-    /// MVSbeta exchange by Furness and Sun
-    MGGA_X_MVSB = 302,
-    /// MVSbeta* exchange by Furness and Sun
-    MGGA_X_MVSBS = 303,
     /// Revised Minnesota M11 hybrid exchange functional
     HYB_MGGA_X_REVM11 = 304,
     /// Revised Minnesota M06 hybrid exchange functional
@@ -716,10 +710,20 @@ pub enum XcFuncId {
     GGA_X_DF3_OPT1 = 346,
     /// Becke 86 reoptimized by Chakraborty et al for use with vdW functional
     GGA_X_DF3_OPT2 = 347,
+    /// HLE17 reparametrization for band gaps
+    MGGA_XC_T_HLE17 = 348,
+    /// Barbiellini & Jarlborg 89
+    LDA_C_BJ89 = 349,
+    /// Lee, Lee & Parr reparametrization of B88
+    GGA_X_LLP = 350,
+    /// Liu-Parr correlation with 4 parameters
+    LDA_C_LP96_B = 351,
+    /// Liu-Parr kinetic with 4 parameters
+    LDA_K_LP96_B = 352,
+    /// Random Phase Approximation based Functional (RPAF)
+    LDA_C_RPAF = 353,
     /// CAM-B3LYP retuned for core electron ionization energies
     HYB_GGA_XC_CQTP25 = 385,
-    /// opB3LYP: B3LYP reoptimized in 6-311++G(2d,2p) basis set
-    HYB_GGA_XC_OPB3LYP = 386,
     /// Self-interaction corrected correlation functional by Schmidt et al
     MGGA_C_CC = 387,
     /// Iso-orbital corrected LDA correlation by Lebeda et al
@@ -855,7 +859,8 @@ pub enum XcFuncId {
     HYB_MGGA_XC_PWB6K = 452,
     /// MPW with 1 par. for metals/LYP
     HYB_GGA_XC_MPWLYP1M = 453,
-    /// Revised B3LYP
+    /// Revised B3LYP a.k.a. OpB3LYP; B3LYP reoptimized in 6-311++G(2d,2p) basis
+    /// set
     HYB_GGA_XC_REVB3LYP = 454,
     /// CAMY version of BLYP
     HYB_GGA_XC_CAMY_BLYP = 455,
@@ -1423,4 +1428,12 @@ pub enum XcFuncId {
     HYB_MGGA_X_PI_M06_2X = 769,
     /// Physically-informed Minnesota M06-2X correlation functional
     MGGA_C_PI_M06_2X = 770,
+    /// COACH exchange-correlation functional
+    HYB_MGGA_XC_COACH = 771,
+    /// Simplified regularized Tao-Mo exchange (v1)
+    MGGA_X_SREGTM_V1 = 772,
+    /// Simplified regularized Tao-Mo exchange (v2)
+    MGGA_X_SREGTM_V2 = 773,
+    /// Simplified regularized Tao-Mo exchange (v3)
+    MGGA_X_SREGTM_V3 = 774,
 }

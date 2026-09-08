@@ -93,8 +93,12 @@ const char *xc_version_string(void);
 #define XC_NOARG
 #define XC_COMMA ,
 
-/* the following macros *do not* include zk */
-/* the following macros are probably to DELETE */
+/* Expansion lists of every per-order derivative output (excluding zk) for
+   each family, in canonical order.  They exist only to spell out the
+   parameter lists of the legacy flat evaluators (xc_lda/xc_gga/xc_mgga,
+   declared below) and the composite mix plumbing.  New code
+   should use the struct interface (xc_*_new) or the convenience entry
+   points instead; these macros can go once those last users are migrated. */
 
 #define LDA_OUT_PARAMS_NO_EXC(P1_, P2_) \
   P1_ P2_ ## vrho   \
@@ -420,13 +424,22 @@ void xc_mgga_new(const xc_func_type *func, int order, size_t np,
              const double *rho, const double *sigma, const double *lapl,
              const double *tau, xc_mgga_out_params *out);
 
-/** Evaluate an     LDA functional */
+/**
+ * Legacy flat-argument evaluation interface.
+ *
+ * Every derivative output is a separate pointer argument, spelled out by
+ * the *_OUT_PARAMS_NO_EXC macros, so xc_mgga() has 70+ parameters.  These
+ * are kept for backward compatibility (and are still used internally by
+ * the composite mix evaluators); new code should prefer
+ *   - the per-order convenience entry points -- xc_lda_exc, xc_gga_exc_vxc,
+ *     xc_mgga_exc_vxc_fxc, ... -- which take only the outputs requested; or
+ *   - the struct interface xc_{lda,gga,mgga}_new(p, order, np, ..., &out)
+ *     with an xc_{lda,gga,mgga}_out_params whose unused fields are NULL.
+ */
 void xc_lda (const xc_func_type *p, size_t np, const double *rho,
              double *zk LDA_OUT_PARAMS_NO_EXC(XC_COMMA double *, ));
-/** Evaluate a      GGA functional */
 void xc_gga (const xc_func_type *p, size_t np, const double *rho, const double *sigma,
              double *zk GGA_OUT_PARAMS_NO_EXC(XC_COMMA double *, ));
-/** Evaluate a meta-GGA functional */
 void xc_mgga(const xc_func_type *p, size_t np,
              const double *rho, const double *sigma, const double *lapl_rho, const double *tau,
              double *zk MGGA_OUT_PARAMS_NO_EXC(XC_COMMA double *, ));

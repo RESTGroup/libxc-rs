@@ -50,7 +50,7 @@ Default features:
 
 Other features:
 - **`api-v6_2`**: Binds libxc v6.2.2 (base API).
-- **`api-v7_1`**: Binds libxc v7.1.0 API (cumulative with `api-v7_0`). Adds `xc_func_init_flags` and runtime device selection. Note v7.1.0 is not a released version (devel branch of original libxc), API may change for v7.1.
+- **`api-v7_1`**: Binds libxc v7.1 API (cumulative with `api-v7_0`; released upstream as 7.1.0–7.1.2, headers track the 7.1.2 tag). Adds `xc_func_init_flags` and runtime device selection.
 - **`cuda`**: GPU computation support via `cudarc`.
   - Creates GPU functionals with [`LibXCFunctional::from_identifier_with_device`] and [`LibXCDeviceFlag::OnDevice`]; computes with [`cuda_compute_xc`] (and per-family `cuda_compute_lda`/`gga`/`mgga`, plus `_with_output`/`_with_unsliced_output` variants).
   - Input/output types are [`LibXCCudaInput`] (`HashMap<String, CudaView<f64>>`) and [`LibXCCudaOutputMut`] (`HashMap<String, CudaViewMut<f64>>`).
