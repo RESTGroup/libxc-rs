@@ -1,0 +1,44 @@
+name: test-cpu
+
+# CPU test matrix over supported libxc versions. Each matrix leg installs a
+# pinned conda-forge `libxc` package and points `LIBXC_DYLOAD` (the highest
+# priority candidate of the dynamic loader) at the conda-installed library,
+# so the exact version under test is exercised together with its matching
+# `api-vX_Y` feature set.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-cpu:
+    name: cpu / libxc ${{ matrix.libxc }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - libxc: "6.2.2"
+            features: "api-v6_2,dynamic_loading"
+          - libxc: "7.0.0"
+            features: "api-v7_0,dynamic_loading"
+          - libxc: "7.1.2"
+            features: "api-v7_1,dynamic_loading"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+
+      - name: Install libxc ${{ matrix.libxc }} from conda-forge
+        run: conda install -y --override-channels -c conda-forge "libxc=${{ matrix.libxc }}"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: |
+          CONDA_BASE=$(conda info --base)
+          ls -l "$CONDA_BASE/lib/"libxc*
+          export LIBXC_DYLOAD="$CONDA_BASE/lib/libxc.so"
+          cargo test -p libxc --no-default-features --features="${{ matrix.features }}"

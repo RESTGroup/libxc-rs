@@ -34,6 +34,10 @@ Change:
 
 - `LibXCError` is now `#[non_exhaustive]`: new variants may be added in
   patch releases, so downstream matches should include a wildcard (`_`) arm.
+- CI: the CPU test workflow now runs a matrix over libxc 6.2.2, 7.0.0 and
+  7.1.2 (conda-forge `libxc` package), pointing `LIBXC_DYLOAD` at the
+  conda-installed library and selecting the matching `api-vX_Y` feature set
+  for each leg (replaces the previous single v7.0 workflow).
 
 ## v0.1.3 -- 2026-09-08
 
