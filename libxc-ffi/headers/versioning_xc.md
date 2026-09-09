@@ -94,6 +94,10 @@ xc_func_get_ext_params_value
 
 # v7.1
 
+Released upstream as v7.1.0–v7.1.2. The v7.1 headers in this project track
+the released 7.1.2 tag (earlier they were snapshotted from the `devel`
+branch before the release).
+
 ## Introduced in v7.1
 
 xc_func_info_get_default_flags

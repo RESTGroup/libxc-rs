@@ -13,7 +13,7 @@ If human developers forgets to define `CLAUDE.local.md`, you should ask them to 
 General rules
 - This repository should live at `LIBXC_REPO_PATH`, which is defined in `CLAUDE.local.md`. 
 - **This repository should not be modified**, unless you are going to checkout specific tags (versions) of libxc.
-- Main branch is `devel`, useful tags can be `6.2.2` and `7.0.0` (latest stable version at current time).
+- Main branch is `devel`, useful tags can be `6.2.2`, `7.0.0` and `7.1.2` (latest stable version at current time).
 
 Important files for FFI and wrapper development:
 - `src/*.h`: the headers. Note that these files are also copied to this project under `libxc-ffi/headers` folder.
@@ -66,7 +66,7 @@ We will currently separating CPU and CUDA implementation. CUDA will always have 
 
 For this FFI wrapper, we will start from libxc v6.2.2.
 
-At current time (2026-may), the latest stable version is v7.0.0, and developer version is v7.1.0. We will handle three versions: v6.2, v7.0, v7.1.
+At current time (2026-sep), the latest stable version is v7.1.2, and the `devel` branch is under development towards the next version. We will handle three released versions: v6.2, v7.0, v7.1.
 The cargo feature will activate the corresponding version of header (`api-v6_2`, `api-v7_0`, `api-v7_1`), and the default version is v7.0.
 We will save libxc headers in folder `libxc-ffi/headers`.
 

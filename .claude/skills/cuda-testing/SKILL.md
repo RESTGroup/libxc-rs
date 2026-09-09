@@ -11,7 +11,7 @@ GPUs, CUDA testing is manual and local-only.
 
 **Please note that you must pass the correct cargo feature to the corresponding version of the libxc shared library**:
 - `api-v7_0` for libxc v7.0
-- `api-v7_1` for libxc v7.1 (or the `devel` branch of libxc)
+- `api-v7_1` for libxc v7.1 (released as 7.1.0–7.1.2)
 
 For cuda tests, you also need to pass the `cuda` feature (which implies `api-v7_1`).
 

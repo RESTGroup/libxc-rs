@@ -31,7 +31,8 @@ pub fn test_input(data: &[[f64; 9]], spin: LibXCSpin) -> HashMap<String, Vec<f64
             result
         },
         LibXCSpin::Polarized => {
-            // [data[RHO_A][0], data[RHO_B][0], data[RHO_A][1], data[RHO_B][1], ...]
+            // [data[RHO_A][0], data[RHO_B][0], data[RHO_A][1], data[RHO_B][1],
+            // ...]
             let rho = data.iter().flat_map(|r| [r[RHO_A], r[RHO_B]]).collect();
             let sigma = data.iter().flat_map(|r| [r[SIGMA_AA], r[SIGMA_AB], r[SIGMA_BB]]).collect();
             let lapl = data.iter().flat_map(|r| [r[LAPL_A], r[LAPL_B]]).collect();

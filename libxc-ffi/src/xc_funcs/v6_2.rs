@@ -22,7 +22,7 @@ pub enum XcFuncId {
     LDA_C_RPA = 3,
     /// Hedin & Lundqvist
     LDA_C_HL = 4,
-    /// Gunnarsson & Lundqvist
+    /// Gunnarson & Lundqvist
     LDA_C_GL = 5,
     /// Slater's Xalpha
     LDA_C_XALPHA = 6,
@@ -49,7 +49,7 @@ pub enum XcFuncId {
     /// von Barth & Hedin
     LDA_C_VBH = 17,
     /// Casula, Sorella & Senatore
-    LDA_C_1D_CSS = 18,
+    LDA_C_1D_CSC = 18,
     /// Slater exchange
     LDA_X_2D = 19,
     /// Teter 93
@@ -220,8 +220,6 @@ pub enum XcFuncId {
     GGA_X_PBE_R = 102,
     /// Becke 86
     GGA_X_B86 = 103,
-    /// Becke's original half-and-half functional: 50% HF and 50% LDA xc
-    HYB_LDA_XC_B93 = 104,
     /// Becke 86 with modified gradient correction
     GGA_X_B86_MGC = 105,
     /// Becke 88
@@ -405,7 +403,7 @@ pub enum XcFuncId {
     /// Functional for barrier heights
     GGA_XC_MOHLYP2 = 195,
     /// Tozer and Handy v. FL
-    LDA_XC_TH_FL = 196,
+    GGA_XC_TH_FL = 196,
     /// Tozer and Handy v. FC
     GGA_XC_TH_FC = 197,
     /// Tozer and Handy v. FCFO
@@ -474,9 +472,8 @@ pub enum XcFuncId {
     MGGA_X_MS2_REV = 228,
     /// Cancio and Chou 2006
     MGGA_XC_CC06 = 229,
-    /// Ghosh-Parr 1986 meta-GGA exchange, later reinvestigated by Manby and
-    /// Knowles
-    MGGA_X_GP86 = 230,
+    /// Exchange for accurate virtual orbital energies
+    MGGA_X_MK00 = 230,
     /// Tao, Perdew, Staroverov & Scuseria
     MGGA_C_TPSS = 231,
     /// VSXC (correlation part)
@@ -667,59 +664,8 @@ pub enum XcFuncId {
     GGA_X_NCAPR = 324,
     /// relPBE0 a.k.a. relPBE: PBE0 refitted for actinide compounds
     HYB_GGA_XC_RELPBE0 = 325,
-    /// Exact exchange-like exchange of Aschebrock et al
-    MGGA_X_EEL = 326,
     /// Becke 97-3c by Grimme et. al.
     GGA_XC_B97_3C = 327,
-    /// epc17(-1): electron-proton correlation 2017
-    LDA_C_EPC17 = 328,
-    /// epc17-2: electron-proton correlation 2017 for proton affinities
-    LDA_C_EPC17_2 = 329,
-    /// epc18-1: electron-proton correlation 2018
-    LDA_C_EPC18_1 = 330,
-    /// epc18-2: electron-proton correlation 2018 for proton affinities
-    LDA_C_EPC18_2 = 331,
-    /// dispersionless-optimized B97
-    GGA_XC_DLB97 = 332,
-    /// Modified SCAN (mSCAN) exchange of Desmarais, Erba, Vignale, and Pittalis
-    MGGA_X_MSCAN = 333,
-    /// Modified SCAN (mSCAN) correlation of Desmarais, Erba, Vignale, and
-    /// Pittalis
-    MGGA_C_MSCAN = 334,
-    /// PBE reparametrization (version 1) for band gaps
-    GGA_X_T_PBE1 = 335,
-    /// PBE reparametrization (version 2) for band gaps
-    GGA_X_T_PBE2 = 336,
-    /// SLOC reparametrization for band gaps
-    LDA_X_T_SLOC = 337,
-    /// Exchange part of type-I band gap functional by Bhattacharjee, Koshi and
-    /// Lee
-    GGA_X_BKL1 = 338,
-    /// Exchange part of type-II band gap functional by Bhattacharjee, Koshi and
-    /// Lee
-    GGA_X_BKL2 = 339,
-    /// Minnesota CF22D hybrid exchange functional
-    HYB_MGGA_X_CF22D = 340,
-    /// Minnesota CF22D correlation functional
-    MGGA_C_CF22D = 341,
-    /// Lebeda-Aschebrock-Kummel meta-GGA exchange
-    MGGA_X_LAK = 342,
-    /// Correlation part of type-I band gap functional by Bhattacharjee, Koshi
-    /// and Lee
-    GGA_C_BKL1 = 343,
-    /// Correlation part of type-II band gap functional by Bhattacharjee, Koshi
-    /// and Lee
-    GGA_C_BKL2 = 344,
-    /// Lebeda-Aschebrock-Kummel meta-GGA correlation
-    MGGA_C_LAK = 345,
-    /// Becke 88 reoptimized by Chakraborty et al for use with vdW functional
-    GGA_X_DF3_OPT1 = 346,
-    /// Becke 86 reoptimized by Chakraborty et al for use with vdW functional
-    GGA_X_DF3_OPT2 = 347,
-    /// CAM-B3LYP retuned for core electron ionization energies
-    HYB_GGA_XC_CQTP25 = 385,
-    /// opB3LYP: B3LYP reoptimized in 6-311++G(2d,2p) basis set
-    HYB_GGA_XC_OPB3LYP = 386,
     /// Self-interaction corrected correlation functional by Schmidt et al
     MGGA_C_CC = 387,
     /// Iso-orbital corrected LDA correlation by Lebeda et al
@@ -816,10 +762,9 @@ pub enum XcFuncId {
     HYB_GGA_XC_CAM_B3LYP = 433,
     /// CAM version of B3LYP, tuned for excitations and properties
     HYB_GGA_XC_TUNED_CAM_B3LYP = 434,
-    /// BHandH: 50% LDA exchange and 50% HF exchange with 100% LYP correlation
+    /// BHandH i.e. BHLYP
     HYB_GGA_XC_BHANDH = 435,
-    /// BHandHLYP a.k.a. BHLYP: 50% B88 exchange and 50% HF exchange with 100%
-    /// LYP correlation
+    /// BHandHLYP
     HYB_GGA_XC_BHANDHLYP = 436,
     /// B3LYP with RC04 LDA
     HYB_GGA_XC_MB3LYP_RC04 = 437,
@@ -941,7 +886,7 @@ pub enum XcFuncId {
     MGGA_C_RSCAN = 494,
     /// Swart 2012 GGA exchange
     GGA_X_S12G = 495,
-    /// Swart 2012 hybrid GGA exchange
+    /// Swart 2012 hybrid exchange
     HYB_GGA_X_S12H = 496,
     /// Re-regularized SCAN exchange by Furness et al
     MGGA_X_R2SCAN = 497,
@@ -1067,7 +1012,7 @@ pub enum XcFuncId {
     GGA_C_ZVPBEINT = 557,
     /// another spin-dependent correction to PBEsol
     GGA_C_ZVPBESOL = 558,
-    /// Thakkar and McCarthy reparametrization, also known as reLYP
+    /// Takkar and McCarthy reparametrization
     GGA_C_TM_LYP = 559,
     /// Thakkar and McCarthy reparametrization
     GGA_C_TM_PBE = 560,
@@ -1077,7 +1022,7 @@ pub enum XcFuncId {
     MGGA_C_KCIS = 562,
     /// Hybrid based on KCIS
     HYB_MGGA_XC_B0KCIS = 563,
-    /// Lee & Parr, Eq. (60)
+    /// Lee & Parr, Eq. (56)
     MGGA_XC_LP90 = 564,
     /// A dynamical correlation functional
     GGA_C_CS1 = 565,
@@ -1259,16 +1204,6 @@ pub enum XcFuncId {
     MGGA_X_VCML = 651,
     /// VCML-rVV10 by Trepte and Voss
     MGGA_XC_VCML_RVV10 = 652,
-    /// Long-range corrected functional based on short-range LDA exchange (erfc)
-    HYB_LDA_X_ERF = 653,
-    /// Short ranged correlation LDA (erfc)
-    LDA_C_PW_ERF = 654,
-    /// Short ranged PBE exchange (erfc)
-    GGA_X_PBE_ERF_GWS = 655,
-    /// Short-range PBE (GWS) exchange (erfc) + long-range exact exchange
-    HYB_GGA_X_PBE_ERF_GWS = 656,
-    /// Short ranged PBE correlation (erfc)
-    GGA_C_PBE_ERF_GWS = 657,
     /// Google Accelerated Science 22
     HYB_MGGA_XC_GAS22 = 658,
     /// r2SCANh: r2SCAN hybrid like TPSSh with 10% exact exchange
@@ -1277,8 +1212,6 @@ pub enum XcFuncId {
     HYB_MGGA_XC_R2SCAN0 = 660,
     /// r2SCAN50: r2SCAN hybrid like PBE50 with 50% exact exchange
     HYB_MGGA_XC_R2SCAN50 = 661,
-    /// Range-separated re-regularized SCAN exchange by Wittmann et al
-    HYB_MGGA_X_WR2SCAN = 662,
     /// CAM hybrid screened exchange PBE version
     HYB_GGA_XC_CAM_PBEH = 681,
     /// CAMY hybrid screened exchange PBE version
@@ -1401,26 +1334,4 @@ pub enum XcFuncId {
     MGGA_X_KTBM_24 = 759,
     /// KTBM learned exchange - GAP
     MGGA_X_KTBM_GAP = 760,
-    /// MS-PBEl, a PBE-like meta-GGA exchange
-    MGGA_X_MSPBEL = 761,
-    /// regularized MS-PBEl
-    MGGA_X_RMSPBEL = 762,
-    /// MS-RPBEl, a RPBE-like meta-GGA exchange
-    MGGA_X_MSRPBEL = 763,
-    /// regularized MS-RPBEl
-    MGGA_X_RMSRPBEL = 764,
-    /// MS-B86bl, a B86b-like meta-GGA exchange
-    MGGA_X_MSB86BL = 765,
-    /// regularized MS-B86bl
-    MGGA_X_RMSB86BL = 766,
-    /// Dispersionless physically-informed Minnesota M06-2X hybrid exchange
-    /// functional
-    HYB_MGGA_X_PI_M06_2X_DL = 767,
-    /// Dispersionless physically-informed Minnesota M06-2X correlation
-    /// functional
-    MGGA_C_PI_M06_2X_DL = 768,
-    /// Physically-informed Minnesota M06-2X hybrid exchange functional
-    HYB_MGGA_X_PI_M06_2X = 769,
-    /// Physically-informed Minnesota M06-2X correlation functional
-    MGGA_C_PI_M06_2X = 770,
 }

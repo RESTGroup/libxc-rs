@@ -298,9 +298,6 @@
 #define  XC_GGA_X_CHACHIYO                 298 /* Chachiyo exchange */
 #define  XC_MGGA_X_RTPSS                   299 /* TPSS for surface adsorption */
 #define  XC_MGGA_X_MS2B                    300 /* MS2beta exchange of Furness and Sun */
-#define  XC_MGGA_X_MS2BS                   301 /* MS2beta* exchange of Furness and Sun */
-#define  XC_MGGA_X_MVSB                    302 /* MVSbeta exchange by Furness and Sun */
-#define  XC_MGGA_X_MVSBS                   303 /* MVSbeta* exchange by Furness and Sun */
 #define  XC_HYB_MGGA_X_REVM11              304 /* Revised Minnesota M11 hybrid exchange functional */
 #define  XC_HYB_MGGA_X_REVM06              305 /* Revised Minnesota M06 hybrid exchange functional */
 #define  XC_MGGA_C_REVM06                  306 /* Revised Minnesota M06 correlation functional */
@@ -345,8 +342,13 @@
 #define  XC_MGGA_C_LAK                     345 /* Lebeda-Aschebrock-Kummel meta-GGA correlation */
 #define  XC_GGA_X_DF3_OPT1                 346 /* Becke 88 reoptimized by Chakraborty et al for use with vdW functional */
 #define  XC_GGA_X_DF3_OPT2                 347 /* Becke 86 reoptimized by Chakraborty et al for use with vdW functional */
+#define  XC_MGGA_XC_T_HLE17                348 /* HLE17 reparametrization for band gaps */
+#define  XC_LDA_C_BJ89                     349 /* Barbiellini & Jarlborg 89 */
+#define  XC_GGA_X_LLP                      350 /* Lee, Lee & Parr reparametrization of B88 */
+#define  XC_LDA_C_LP96_B                   351 /* Liu-Parr correlation with 4 parameters */
+#define  XC_LDA_K_LP96_B                   352 /* Liu-Parr kinetic with 4 parameters */
+#define  XC_LDA_C_RPAF                     353 /* Random Phase Approximation based Functional (RPAF) */
 #define  XC_HYB_GGA_XC_CQTP25              385 /* CAM-B3LYP retuned for core electron ionization energies */
-#define  XC_HYB_GGA_XC_OPB3LYP             386 /* opB3LYP: B3LYP reoptimized in 6-311++G(2d,2p) basis set */
 #define  XC_MGGA_C_CC                      387 /* Self-interaction corrected correlation functional by Schmidt et al */
 #define  XC_MGGA_C_CCALDA                  388 /* Iso-orbital corrected LDA correlation by Lebeda et al */
 #define  XC_HYB_MGGA_XC_BR3P86             389 /* BR3P86 hybrid meta-GGA from Neumann and Handy */
@@ -414,7 +416,7 @@
 #define  XC_HYB_MGGA_XC_PW6B95             451 /* Mixture of PW91 with BC95 from Zhao and Truhlar */
 #define  XC_HYB_MGGA_XC_PWB6K              452 /* Mixture of PW91 with BC95 from Zhao and Truhlar for kinetics */
 #define  XC_HYB_GGA_XC_MPWLYP1M            453 /* MPW with 1 par. for metals/LYP */
-#define  XC_HYB_GGA_XC_REVB3LYP            454 /* Revised B3LYP */
+#define  XC_HYB_GGA_XC_REVB3LYP            454 /* Revised B3LYP a.k.a. OpB3LYP; B3LYP reoptimized in 6-311++G(2d,2p) basis set */
 #define  XC_HYB_GGA_XC_CAMY_BLYP           455 /* CAMY version of BLYP */
 #define  XC_HYB_GGA_XC_PBE0_13             456 /* PBE0-1/3 */
 #define  XC_HYB_MGGA_XC_TPSSH              457 /* TPSSh */
@@ -694,3 +696,7 @@
 #define  XC_MGGA_C_PI_M06_2X_DL            768 /* Dispersionless physically-informed Minnesota M06-2X correlation functional */
 #define  XC_HYB_MGGA_X_PI_M06_2X           769 /* Physically-informed Minnesota M06-2X hybrid exchange functional */
 #define  XC_MGGA_C_PI_M06_2X               770 /* Physically-informed Minnesota M06-2X correlation functional */
+#define  XC_HYB_MGGA_XC_COACH              771 /* COACH exchange-correlation functional */
+#define  XC_MGGA_X_SREGTM_V1               772 /* Simplified regularized Tao-Mo exchange (v1) */
+#define  XC_MGGA_X_SREGTM_V2               773 /* Simplified regularized Tao-Mo exchange (v2) */
+#define  XC_MGGA_X_SREGTM_V3               774 /* Simplified regularized Tao-Mo exchange (v3) */

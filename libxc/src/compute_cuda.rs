@@ -407,6 +407,10 @@ impl LibXCFunctional {
         let mut buffer = stream
             .alloc_zeros::<f64>(layout.total_size)
             .map_err(|e| LibXCError::CudaError(format!("CUDA allocation failed: {e}")))?;
+        // No tau-family scratch pointers on device: libxc 6.2.x (the only
+        // version requiring them) has no GPU support at all, and host pointers
+        // must never reach a device-side evaluator.
+        let extra = crate::layout_handling::MggaExtraPtrs::new();
         {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
             unsafe {
@@ -419,6 +423,7 @@ impl LibXCFunctional {
                     tau_ptr,
                     output_base as *mut f64,
                     &layout,
+                    &extra,
                 );
             }
         }
@@ -444,6 +449,8 @@ impl LibXCFunctional {
             )));
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
+        // No tau-family scratch pointers on device (see cuda_compute_mgga).
+        let extra = crate::layout_handling::MggaExtraPtrs::new();
         unsafe {
             xc_mgga_call(
                 self.ptr,
@@ -454,6 +461,7 @@ impl LibXCFunctional {
                 tau_ptr,
                 output_base as *mut f64,
                 &layout,
+                &extra,
             );
         }
         Ok(layout)
@@ -487,10 +495,12 @@ impl LibXCFunctional {
         let tau_ptr =
             conditional_cuda_input_ptr(input, "tau", npoints, dim.tau, needs_tau, stream)?;
         let ptrs = validate_cuda_output_ptrs(output, &MGGA_OUTPUT_LABELS, npoints, dim, stream)?;
+        // No tau-family scratch pointers on device (see cuda_compute_mgga).
+        let extra = crate::layout_handling::MggaExtraPtrs::new();
 
         unsafe {
             xc_mgga_call_with_output(
-                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs,
+                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs, &extra,
             );
         }
         Ok(())

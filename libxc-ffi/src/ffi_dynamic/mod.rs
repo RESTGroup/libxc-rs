@@ -106,7 +106,8 @@ mod dynamic_loading_specific {
     }
 
     fn extract_lib_from_python_bin(python_bin: &str) -> Option<String> {
-        // If python is at /path/to/bin/python, library should be at /path/to/lib/
+        // If python is at /path/to/bin/python, library should be at
+        // /path/to/lib/
         let bin_path = std::path::Path::new(python_bin);
         if let Some(parent) = bin_path.parent() {
             if let Some(base) = parent.parent() {
