@@ -53,6 +53,7 @@ pub mod prelude {
     pub(crate) use libxc_ffi::ffi;
     pub(crate) use std::collections::HashMap;
     pub(crate) use std::ffi::CString;
+    pub(crate) use std::sync::Arc;
 }
 
 // documentation exception

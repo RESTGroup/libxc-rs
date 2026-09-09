@@ -13,6 +13,12 @@ pub enum LibXCError {
     ComputeError(String),
     /// Error related to parameter setting.
     ParamSetError { param_name: String, details: String },
+    /// Tried to mutate a functional that is currently shared with clones.
+    ///
+    /// All setters require exclusive access to the underlying C object:
+    /// drop every clone (or wait for the parallel scope holding them to
+    /// finish) before setting parameters, thresholds or coefficients.
+    SharedError,
     /// Error related to CUDA operations.
     #[cfg(feature = "cuda")]
     CudaError(String),
@@ -28,6 +34,12 @@ impl fmt::Display for LibXCError {
             LibXCError::ComputeError(msg) => write!(f, "compute error: {msg}"),
             LibXCError::ParamSetError { param_name, details } => {
                 write!(f, "parameter set error for {param_name}: {details}")
+            },
+            LibXCError::SharedError => {
+                write!(
+                    f,
+                    "cannot mutate a shared functional: all clones must be dropped before calling setters"
+                )
             },
             #[cfg(feature = "cuda")]
             LibXCError::CudaError(msg) => write!(f, "cuda error: {msg}"),

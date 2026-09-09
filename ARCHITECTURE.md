@@ -162,11 +162,26 @@ Parses `headers/xc_funcs_v*.h` into Rust enums in `src/xc_funcs/`.
 
 ### Core Type: `LibXCFunctional`
 
-The central type, wrapping a `*mut ffi::xc_func_type` pointer. It is split across multiple files using separate `impl` blocks:
+The central type, wrapping a `*mut ffi::xc_func_type` pointer. The pointer is
+owned by a private `LibXCFuncRaw` handle (which carries the `Drop` and the
+`unsafe impl Send/Sync`), held by `LibXCFunctional` behind an `Arc`:
+
+- `Clone` is cheap and shares the C object (no FFI-level re-initialization);
+  the object is freed when the last handle drops.
+- Sharing is lock-free: all libxc read/compute entry points take
+  `const xc_func_type *` and do not write through it, so concurrent
+  `compute_xc`/getters through clones are data-race-free (the intended rayon
+  pattern).
+- All setters take `&mut self` **and** require `Arc` uniqueness (checked via
+  `Arc::get_mut`): while any clone is alive they fail with
+  `LibXCError::SharedError` (or panic, for non-`_f` variants). This prevents
+  safe code from mutating the C object while other threads compute with it.
+
+It is split across multiple files using separate `impl` blocks:
 
 | File | Responsibility |
 |------|---------------|
-| `functional.rs` | Construction (`from_identifier`, `from_number`, `from_identifier_with_device`, `from_number_with_device`), info getters (`number`, `kind`, `family`, `flags`, `spin`, `dim`, `device_flag`, `is_on_device`), references, description, external parameters, thresholds, hybrid/CAM/VV10 coefficients, auxiliary functionals, Drop |
+| `functional.rs` | Construction (`from_identifier`, `from_number`, `from_identifier_with_device`, `from_number_with_device`), info getters (`number`, `kind`, `family`, `flags`, `spin`, `dim`, `device_flag`, `is_on_device`), references, description, external parameters, thresholds, hybrid/CAM/VV10 coefficients, auxiliary functionals, `LibXCFuncRaw` (raw handle: Drop, Send/Sync) |
 | `functional_specific.rs` | Hybrid/CAM/VV10 coefficient setters |
 | `compute_cpu.rs` | CPU compute methods: `compute_lda`, `compute_gga`, `compute_mgga`, and unified `compute_xc` dispatch |
 | `compute_cuda.rs` | CUDA compute methods (gated by `cuda` feature): `cuda_compute_lda`, `cuda_compute_gga`, `cuda_compute_mgga`, and unified `cuda_compute_xc` dispatch |

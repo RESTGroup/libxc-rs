@@ -122,17 +122,125 @@ pub struct LibXCReference {
 /// [`compute_xc_with_output`]: Self::compute_xc_with_output
 /// [`LibXCOutputLayout`]: crate::layout_handling::LibXCOutputLayout
 ///
-/// # Notes on parallel
+/// # Cloning and sharing across threads
 ///
-/// This struct is made to be [`Sync`] and [`Send`] available. But note we have
-/// not assured safety, so not to abuse them. Using send and sync for xc
-/// computation is probably okay.
+/// `LibXCFunctional` is cheaply cloneable. Cloning does **not** re-initialize
+/// the underlying C functional: every clone is a reference-counted handle to
+/// the same `xc_func_type`, and the C object is released only when the last
+/// handle is dropped. This is the recommended way to share one functional
+/// with worker threads:
+///
+/// ```rust
+/// use libxc::prelude::{libxc_enum_items::*, *};
+/// use rayon::prelude::*;
+/// use std::collections::HashMap;
+///
+/// let func = LibXCFunctional::from_identifier("gga_c_pbe", Unpolarized);
+/// let rho: Vec<f64> = (0..2000).map(|i| 0.01 + 0.001 * i as f64).collect();
+/// let sigma: Vec<f64> = rho.iter().map(|r| 0.2 * r).collect();
+///
+/// // evaluate per 100-point chunk in parallel, sharing `func` (no locks)
+/// let energy_par: f64 = rho
+///     .par_chunks(100)
+///     .zip(sigma.par_chunks(100))
+///     .map(|(rho, sigma)| {
+///         let input = HashMap::from([
+///             ("rho".to_string(), rho as &[f64]),
+///             ("sigma".to_string(), sigma as &[f64]),
+///         ]);
+///         let (buf, layout) = func.compute_xc(&input, 0).unwrap();
+///         buf[layout.get("zk").unwrap()].iter().sum::<f64>()
+///     })
+///     .sum();
+///
+/// // same computation, serial
+/// let input = HashMap::from([
+///     ("rho".to_string(), rho.as_slice()),
+///     ("sigma".to_string(), sigma.as_slice()),
+/// ]);
+/// let (buf, layout) = func.compute_xc(&input, 0).unwrap();
+/// let energy_ser: f64 = buf[layout.get("zk").unwrap()].iter().sum();
+/// assert!((energy_par - energy_ser).abs() < 1e-10);
+/// ```
+///
+/// # Notes on parallel and soundness
+///
+/// This struct is [`Send`] and [`Sync`], and the two are designed for
+/// lock-free sharing: there is no interior locking, and read-side usage
+/// (compute, introspection) never blocks other threads. The soundness
+/// argument is the following:
+///
+/// - All libxc read entry points (the `xc_{lda,gga,mgga}_*` evaluation
+///   routines, info/coefficient getters) take `const xc_func_type *` and do not
+///   write through it; the struct holds only configuration, no scratch buffers.
+///   Concurrent reads through shared handles are therefore data-race-free.
+/// - Every mutating method (`set_*`) takes `&mut self` **and** requires that no
+///   clone of the functional exists, enforced internally via the reference
+///   count. While any clone is alive, setters fail with
+///   [`LibXCError::SharedError`] (or panic, for the non-`_f` variants);
+///   dropping the clones restores mutability. This rules out safe code mutating
+///   the C object on one thread while another thread computes with it.
 pub struct LibXCFunctional {
+    pub(crate) inner: Arc<LibXCFuncRaw>,
+}
+
+impl Clone for LibXCFunctional {
+    fn clone(&self) -> Self {
+        Self { inner: Arc::clone(&self.inner) }
+    }
+}
+
+/// Sole owner of the underlying libxc C object.
+///
+/// This private type is where the lifetime of the raw `xc_func_type` is
+/// managed. The public [`LibXCFunctional`] holds it behind an [`Arc`], so
+/// cloning shares (rather than duplicates) the C object, and the destructor
+/// below runs exactly once, on the thread that drops the last handle.
+pub(crate) struct LibXCFuncRaw {
     pub(crate) ptr: *mut ffi::xc_func_type,
 }
 
-unsafe impl Send for LibXCFunctional {}
-unsafe impl Sync for LibXCFunctional {}
+// SAFETY (Send): `xc_func_type` is a plain heap-allocated C struct, not tied
+// to the thread that created it. Sending the handle to another thread only
+// moves the pointer; `xc_func_end`/`xc_func_free` merely release allocator
+// (and, for GPU functionals, CUDA) memory, which is valid from any thread.
+//
+// SAFETY (Sync): every read-side libxc entry point (the `xc_{lda,gga,mgga}_*`
+// evaluation routines, all `xc_func_info_*` and coefficient getters) takes
+// `const xc_func_type *` and does not write through it: libxc's compute
+// dispatch (`lda.c`/`gga.c`/`mgga.c`, `xc_mix_func`) treats a functional and
+// its auxiliary functionals as read-only, and `xc_func_type` carries only
+// configuration (spin, thresholds, coefficients, parameters), no scratch
+// buffers. Concurrent reads through shared handles are therefore
+// data-race-free. All mutation is funneled through `&mut self` setters that
+// first prove `Arc` uniqueness (see [`LibXCFunctional::exclusive_ptr`]), so a
+// mutation can never race with reads reachable from another handle.
+unsafe impl Send for LibXCFuncRaw {}
+unsafe impl Sync for LibXCFuncRaw {}
+
+impl Drop for LibXCFuncRaw {
+    fn drop(&mut self) {
+        unsafe {
+            ffi::xc_func_end(self.ptr);
+            ffi::xc_func_free(self.ptr);
+        }
+    }
+}
+
+/// Private helpers.
+impl LibXCFunctional {
+    /// Raw pointer for mutating FFI calls, requiring that no clone shares
+    /// this functional.
+    ///
+    /// `Arc::get_mut` succeeds only when this handle is the sole one left,
+    /// so mutation through the returned pointer cannot race with reads or
+    /// writes through any other handle.
+    pub(crate) fn exclusive_ptr(&mut self) -> Result<*mut ffi::xc_func_type, LibXCError> {
+        let raw: &mut LibXCFuncRaw =
+            Arc::get_mut(&mut self.inner).ok_or(LibXCError::SharedError)?;
+        Ok(raw.ptr)
+    }
+}
 
 /// Creation functions implementation.
 impl LibXCFunctional {
@@ -184,7 +292,7 @@ impl LibXCFunctional {
                 ffi::xc_func_free(ptr);
                 return Err(LibXCError::InitError { func_id, spin });
             }
-            Ok(Self { ptr })
+            Ok(Self { inner: Arc::new(LibXCFuncRaw { ptr }) })
         }
     }
 
@@ -267,7 +375,7 @@ impl LibXCFunctional {
                 return Err(LibXCError::InitError { func_id, spin });
             }
             (*(*ptr).info).flags |= device as i32;
-            Ok(Self { ptr })
+            Ok(Self { inner: Arc::new(LibXCFuncRaw { ptr }) })
         }
     }
 
@@ -295,14 +403,14 @@ impl LibXCFunctional {
     ///
     /// Intended for advanced use; the caller must not free the pointer.
     pub fn as_ptr(&self) -> *const ffi::xc_func_type {
-        self.ptr
+        self.inner.ptr
     }
 
     /// Returns a raw pointer to the underlying `xc_func_type`.
     ///
     /// Intended for advanced use; the caller must not free the pointer.
     pub fn info(&self) -> *const ffi::xc_func_info_type {
-        unsafe { ffi::xc_func_get_info(self.ptr) }
+        unsafe { ffi::xc_func_get_info(self.inner.ptr) }
     }
 
     /// Functional number (ID).
@@ -450,7 +558,7 @@ impl LibXCFunctional {
     ///
     /// `LibXCFunctional.xc_func.contents.nspin`
     pub fn spin(&self) -> LibXCSpin {
-        match unsafe { (*self.ptr).nspin as u32 } {
+        match unsafe { (*self.inner.ptr).nspin as u32 } {
             ffi::XC_UNPOLARIZED => LibXCSpin::Unpolarized,
             ffi::XC_POLARIZED => LibXCSpin::Polarized,
             n => panic!("Unknown spin code: {n}"),
@@ -467,7 +575,7 @@ impl LibXCFunctional {
     /// let dim = xc_func.dim();
     /// // output: xc_dimensions { rho: 1, sigma: 1, lapl: 0, tau: 0, zk: 1, vrho: 1, ... }
     pub fn dim(&self) -> &ffi::xc_dimensions {
-        unsafe { &(*self.ptr).dim }
+        unsafe { &(*self.inner.ptr).dim }
     }
 
     /// Whether this functional has a specific flag.
@@ -842,9 +950,12 @@ impl LibXCFunctional {
     /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
     /// xc_func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
     /// assert_eq!(xc_func.ext_param_values(), &[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// ```
     pub fn ext_param_values(&self) -> Vec<f64> {
         let n = self.n_ext_params();
-        (0..n).map(|i| unsafe { ffi::xc_func_get_ext_params_value(self.ptr, i as c_int) }).collect()
+        (0..n)
+            .map(|i| unsafe { ffi::xc_func_get_ext_params_value(self.inner.ptr, i as c_int) })
+            .collect()
     }
 
     /// Returns a map of external parameter names to their (default value,
@@ -933,8 +1044,9 @@ impl LibXCFunctional {
                 details: format!("expected {n} parameters, got {}", params.len()),
             });
         }
+        let ptr = self.exclusive_ptr()?;
         unsafe {
-            ffi::xc_func_set_ext_params(self.ptr, params.as_ptr());
+            ffi::xc_func_set_ext_params(ptr, params.as_ptr());
         }
         Ok(())
     }
@@ -1029,8 +1141,9 @@ impl LibXCFunctional {
                 details: "external parameter not found".to_string(),
             });
         }
+        let ptr = self.exclusive_ptr()?;
         let c_name = CString::new(name).expect("parameter name contains null byte");
-        unsafe { ffi::xc_func_set_ext_params_name(self.ptr, c_name.as_ptr(), value) };
+        unsafe { ffi::xc_func_set_ext_params_name(ptr, c_name.as_ptr(), value) };
         Ok(())
     }
 }
@@ -1049,48 +1162,128 @@ impl LibXCFunctional {
     /// println!("{:?}", xc_func.dens_threshold()); // 1e-12
     /// ```
     pub fn dens_threshold(&self) -> f64 {
-        unsafe { (*self.ptr).dens_threshold }
+        unsafe { (*self.inner.ptr).dens_threshold }
     }
 
     /// Set the density threshold.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the functional is currently shared with clones (see
+    /// [`LibXCFunctional`] docs on cloning); use
+    /// [`set_dens_threshold_f`](Self::set_dens_threshold_f) to avoid panicking.
     pub fn set_dens_threshold(&mut self, threshold: f64) {
-        unsafe { ffi::xc_func_set_dens_threshold(self.ptr, threshold) }
+        self.set_dens_threshold_f(threshold).unwrap()
+    }
+
+    /// Set the density threshold (fallible).
+    ///
+    /// Fails with [`LibXCError::SharedError`] if the functional is currently
+    /// shared with clones; drop them first.
+    pub fn set_dens_threshold_f(&mut self, threshold: f64) -> Result<(), LibXCError> {
+        let ptr = self.exclusive_ptr()?;
+        unsafe { ffi::xc_func_set_dens_threshold(ptr, threshold) }
+        Ok(())
     }
 
     /// Zeta (spin polarization) threshold for numerical stability.
     pub fn zeta_threshold(&self) -> f64 {
-        unsafe { (*self.ptr).zeta_threshold }
+        unsafe { (*self.inner.ptr).zeta_threshold }
     }
 
     /// Set the zeta (spin polarization) threshold.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the functional is currently shared with clones; use
+    /// [`set_zeta_threshold_f`](Self::set_zeta_threshold_f) to avoid panicking.
     pub fn set_zeta_threshold(&mut self, threshold: f64) {
-        unsafe { ffi::xc_func_set_zeta_threshold(self.ptr, threshold) }
+        self.set_zeta_threshold_f(threshold).unwrap()
+    }
+
+    /// Set the zeta (spin polarization) threshold (fallible).
+    ///
+    /// Fails with [`LibXCError::SharedError`] if the functional is currently
+    /// shared with clones; drop them first.
+    pub fn set_zeta_threshold_f(&mut self, threshold: f64) -> Result<(), LibXCError> {
+        let ptr = self.exclusive_ptr()?;
+        unsafe { ffi::xc_func_set_zeta_threshold(ptr, threshold) }
+        Ok(())
     }
 
     /// Sigma (reduced gradient) threshold for numerical stability.
     pub fn sigma_threshold(&self) -> f64 {
-        unsafe { (*self.ptr).sigma_threshold }
+        unsafe { (*self.inner.ptr).sigma_threshold }
     }
 
     /// Set the sigma (reduced gradient) threshold.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the functional is currently shared with clones; use
+    /// [`set_sigma_threshold_f`](Self::set_sigma_threshold_f) to avoid
+    /// panicking.
     pub fn set_sigma_threshold(&mut self, threshold: f64) {
-        unsafe { ffi::xc_func_set_sigma_threshold(self.ptr, threshold) }
+        self.set_sigma_threshold_f(threshold).unwrap()
+    }
+
+    /// Set the sigma (reduced gradient) threshold (fallible).
+    ///
+    /// Fails with [`LibXCError::SharedError`] if the functional is currently
+    /// shared with clones; drop them first.
+    pub fn set_sigma_threshold_f(&mut self, threshold: f64) -> Result<(), LibXCError> {
+        let ptr = self.exclusive_ptr()?;
+        unsafe { ffi::xc_func_set_sigma_threshold(ptr, threshold) }
+        Ok(())
     }
 
     /// Tau (kinetic energy density) threshold for numerical stability.
     pub fn tau_threshold(&self) -> f64 {
-        unsafe { (*self.ptr).tau_threshold }
+        unsafe { (*self.inner.ptr).tau_threshold }
     }
 
     /// Set the tau (kinetic energy density) threshold.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the functional is currently shared with clones; use
+    /// [`set_tau_threshold_f`](Self::set_tau_threshold_f) to avoid panicking.
     pub fn set_tau_threshold(&mut self, threshold: f64) {
-        unsafe { ffi::xc_func_set_tau_threshold(self.ptr, threshold) }
+        self.set_tau_threshold_f(threshold).unwrap()
+    }
+
+    /// Set the tau (kinetic energy density) threshold (fallible).
+    ///
+    /// Fails with [`LibXCError::SharedError`] if the functional is currently
+    /// shared with clones; drop them first.
+    pub fn set_tau_threshold_f(&mut self, threshold: f64) -> Result<(), LibXCError> {
+        let ptr = self.exclusive_ptr()?;
+        unsafe { ffi::xc_func_set_tau_threshold(ptr, threshold) }
+        Ok(())
     }
 
     /// Enable or disable Fermi hole curvature enforcement (api-v7_0+).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the functional is currently shared with clones; use
+    /// [`set_fhc_enforcement_f`](Self::set_fhc_enforcement_f) to avoid
+    /// panicking.
     #[cfg(feature = "api-v7_0")]
     pub fn set_fhc_enforcement(&mut self, on: bool) {
-        unsafe { ffi::xc_func_set_fhc_enforcement(self.ptr, on as c_int) }
+        self.set_fhc_enforcement_f(on).unwrap()
+    }
+
+    /// Enable or disable Fermi hole curvature enforcement (fallible,
+    /// api-v7_0+).
+    ///
+    /// Fails with [`LibXCError::SharedError`] if the functional is currently
+    /// shared with clones; drop them first.
+    #[cfg(feature = "api-v7_0")]
+    pub fn set_fhc_enforcement_f(&mut self, on: bool) -> Result<(), LibXCError> {
+        let ptr = self.exclusive_ptr()?;
+        unsafe { ffi::xc_func_set_fhc_enforcement(ptr, on as c_int) }
+        Ok(())
     }
 }
 
@@ -1121,7 +1314,7 @@ impl LibXCFunctional {
         if matches!(self.family(), LibXCFamily::HybGGA | LibXCFamily::HybMGGA | LibXCFamily::HybLDA)
             && !self.is_hyb_cam()
         {
-            Some(unsafe { ffi::xc_hyb_exx_coef(self.ptr) })
+            Some(unsafe { ffi::xc_hyb_exx_coef(self.inner.ptr) })
         } else {
             None
         }
@@ -1154,7 +1347,7 @@ impl LibXCFunctional {
             let mut omega: f64 = 0.0;
             let mut alpha: f64 = 0.0;
             let mut beta: f64 = 0.0;
-            unsafe { ffi::xc_hyb_cam_coef(self.ptr, &mut omega, &mut alpha, &mut beta) };
+            unsafe { ffi::xc_hyb_cam_coef(self.inner.ptr, &mut omega, &mut alpha, &mut beta) };
             Some((omega, alpha, beta))
         } else {
             None
@@ -1185,7 +1378,7 @@ impl LibXCFunctional {
             #[allow(non_snake_case)]
             let mut nlc_C: f64 = 0.0;
             unsafe {
-                ffi::xc_nlc_coef(self.ptr, &mut nlc_b, &mut nlc_C);
+                ffi::xc_nlc_coef(self.inner.ptr, &mut nlc_b, &mut nlc_C);
             }
             Some((nlc_b, nlc_C))
         } else {
@@ -1255,21 +1448,12 @@ impl LibXCFunctional {
     ///
     /// `LibXCFunctional.get_aux_funcs(return_ids=True)`
     pub fn aux_funcs_by_id(&self) -> Vec<(i32, f64)> {
-        let n = unsafe { ffi::xc_num_aux_funcs(self.ptr) as i32 };
+        let n = unsafe { ffi::xc_num_aux_funcs(self.inner.ptr) as i32 };
         let mut ids = vec![0 as c_int; n as usize];
         let mut weights = vec![0.0f64; n as usize];
-        unsafe { ffi::xc_aux_func_ids(self.ptr, ids.as_mut_ptr()) }
-        unsafe { ffi::xc_aux_func_weights(self.ptr, weights.as_mut_ptr()) }
+        unsafe { ffi::xc_aux_func_ids(self.inner.ptr, ids.as_mut_ptr()) }
+        unsafe { ffi::xc_aux_func_weights(self.inner.ptr, weights.as_mut_ptr()) }
         ids.into_iter().zip(weights).collect()
-    }
-}
-
-impl Drop for LibXCFunctional {
-    fn drop(&mut self) {
-        unsafe {
-            ffi::xc_func_end(self.ptr);
-            ffi::xc_func_free(self.ptr);
-        }
     }
 }
 

@@ -185,7 +185,7 @@ impl LibXCFunctional {
         {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
             unsafe {
-                xc_lda_call(self.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
+                xc_lda_call(self.inner.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
             }
         }
         Ok((buffer, layout))
@@ -210,7 +210,7 @@ impl LibXCFunctional {
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
         unsafe {
-            xc_lda_call(self.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
+            xc_lda_call(self.inner.ptr, npoints, rho_ptr, output_base as *mut f64, &layout);
         }
         Ok(layout)
     }
@@ -238,7 +238,7 @@ impl LibXCFunctional {
         let ptrs = validate_cuda_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, dim, stream)?;
 
         unsafe {
-            xc_lda_call_with_output(self.ptr, npoints, rho_ptr, &ptrs);
+            xc_lda_call_with_output(self.inner.ptr, npoints, rho_ptr, &ptrs);
         }
         Ok(())
     }
@@ -289,7 +289,7 @@ impl LibXCFunctional {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
             unsafe {
                 xc_gga_call(
-                    self.ptr,
+                    self.inner.ptr,
                     npoints,
                     rho_ptr,
                     sigma_ptr,
@@ -321,7 +321,14 @@ impl LibXCFunctional {
         }
         let (output_base, _sync) = output.device_ptr_mut(&stream);
         unsafe {
-            xc_gga_call(self.ptr, npoints, rho_ptr, sigma_ptr, output_base as *mut f64, &layout);
+            xc_gga_call(
+                self.inner.ptr,
+                npoints,
+                rho_ptr,
+                sigma_ptr,
+                output_base as *mut f64,
+                &layout,
+            );
         }
         Ok(layout)
     }
@@ -350,7 +357,7 @@ impl LibXCFunctional {
         let ptrs = validate_cuda_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, dim, stream)?;
 
         unsafe {
-            xc_gga_call_with_output(self.ptr, npoints, rho_ptr, sigma_ptr, &ptrs);
+            xc_gga_call_with_output(self.inner.ptr, npoints, rho_ptr, sigma_ptr, &ptrs);
         }
         Ok(())
     }
@@ -415,7 +422,7 @@ impl LibXCFunctional {
             let (output_base, _sync) = buffer.device_ptr_mut(stream);
             unsafe {
                 xc_mgga_call(
-                    self.ptr,
+                    self.inner.ptr,
                     npoints,
                     rho_ptr,
                     sigma_ptr,
@@ -453,7 +460,7 @@ impl LibXCFunctional {
         let extra = crate::layout_handling::MggaExtraPtrs::new();
         unsafe {
             xc_mgga_call(
-                self.ptr,
+                self.inner.ptr,
                 npoints,
                 rho_ptr,
                 sigma_ptr,
@@ -500,7 +507,14 @@ impl LibXCFunctional {
 
         unsafe {
             xc_mgga_call_with_output(
-                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs, &extra,
+                self.inner.ptr,
+                npoints,
+                rho_ptr,
+                sigma_ptr,
+                lapl_ptr,
+                tau_ptr,
+                &ptrs,
+                &extra,
             );
         }
         Ok(())
