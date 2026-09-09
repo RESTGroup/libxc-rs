@@ -14,6 +14,10 @@ Fix:
     pre-v7.0 libraries; zeroed scratch substituted for null lapl/tau inputs
     and for tau-family outputs missing from the layout/output map (libxc
     6.2.x aborts the process otherwise)
+  - CI: the v7.0 test workflow now selects `dynamic_loading` explicitly and
+    pins conda-forge `libxc` to `7.0.*`; it previously relied on the implicit
+    feature unification fixed above, and conda-forge's default libxc is now
+    7.1.2
 
 Enhancement:
 

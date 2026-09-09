@@ -367,7 +367,8 @@ impl LibXCFunctional {
         let tau_scratch = input_scratch(dim.tau, npoints);
         let lapl_ptr = if lapl_ptr.is_null() { lapl_scratch.as_ptr() } else { lapl_ptr };
         let tau_ptr = if tau_ptr.is_null() { tau_scratch.as_ptr() } else { tau_ptr };
-        let (_scratch_bufs, extra) = crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
+        let (_scratch_bufs, extra) =
+            crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
                 self.ptr,
@@ -404,7 +405,8 @@ impl LibXCFunctional {
         let tau_scratch = input_scratch(dim.tau, npoints);
         let lapl_ptr = if lapl_ptr.is_null() { lapl_scratch.as_ptr() } else { lapl_ptr };
         let tau_ptr = if tau_ptr.is_null() { tau_scratch.as_ptr() } else { tau_ptr };
-        let (_scratch_bufs, extra) = crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
+        let (_scratch_bufs, extra) =
+            crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
                 self.ptr,

@@ -70,8 +70,8 @@ fn test_regression_entry(
         return Err("SKIP".to_string());
     }
 
-    // BrOH is always unpolarized; _restr species are unpolarized; all others are
-    // polarized
+    // BrOH is always unpolarized; _restr species are unpolarized; all others
+    // are polarized
     let spin = if species == "BrOH" || species.contains("restr") { Unpolarized } else { Polarized };
     let input = example_densities::test_data(species.to_string(), spin);
     let input_ref = input.iter().map(|(k, v)| (k.clone(), v.as_slice())).collect();
@@ -93,7 +93,8 @@ fn test_regression_entry(
             None => return Err(format!("key {} not found in output for {}", key, xc_identifier)),
         };
         let (rtol, atol) = if key == "zk" { (5e-8, 1e-10) } else { (5e-5, 1e-7) };
-        let error_metric = get_error(ref_out, ref_values); // this is how libxc tests
+        let error_metric = get_error(ref_out, ref_values); // this is how libxc
+                                                           // tests
         if !allclose(ref_out, ref_values, rtol, atol) && error_metric > rtol {
             return Err(format!(
                 "mismatch for {}.{} key={}, len={} vs {}, error_metric={:.2e}",

@@ -88,8 +88,8 @@ impl LibXCFunctional {
                 details: "Current functional is not hybrid cam-type (range-separated). Please call `set_hyb_exx_coef` if it is hybrid functional.".to_string(),
             });
         }
-        // set the CAM coefficients, which is usually the canonical way to get these
-        // parameters
+        // set the CAM coefficients, which is usually the canonical way to get
+        // these parameters
         unsafe {
             (*self.ptr).cam_alpha = cam_alpha;
             (*self.ptr).cam_beta = cam_beta;
@@ -106,7 +106,8 @@ impl LibXCFunctional {
                 [("_csr", cam_alpha + cam_beta), ("_clr", cam_alpha), ("_omega", cam_omega)];
             self.set_ext_param_map_f(param_map.into_iter())?;
         } else if self.ext_param_names().iter().any(|name| name == "_omega") {
-            // pattern 3: only omega, with alpha and beta fixed by the functional definition
+            // pattern 3: only omega, with alpha and beta fixed by the
+            // functional definition
             let param_map = [("_omega", cam_omega)];
             self.set_ext_param_map_f(param_map.into_iter())?;
         } else {
@@ -151,7 +152,8 @@ impl LibXCFunctional {
                 details: "Current functional is not VV10.".to_string(),
             });
         }
-        // set the VV10 coefficients, which is the canonical way to get these parameters
+        // set the VV10 coefficients, which is the canonical way to get these
+        // parameters
         unsafe {
             (*self.ptr).nlc_b = nlc_b;
             (*self.ptr).nlc_C = nlc_C;
