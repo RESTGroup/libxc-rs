@@ -13,7 +13,16 @@ GPUs, CUDA testing is manual and local-only.
 - `api-v7_0` for libxc v7.0
 - `api-v7_1` for libxc v7.1 (released as 7.1.0–7.1.2)
 
-For cuda tests, you also need to pass the `cuda` feature (which implies `api-v7_1`).
+For cuda tests, you must pass the `cuda` feature **together with** the
+matching api feature — `cuda` alone does **not** imply `api-v7_1`
+(`cuda = ["dep:cudarc"]` in Cargo.toml), and the default `api-v7_0` bindings
+against a v7.1+ CUDA library make every functional report `OnDevice`
+(v7.1's `xc_func_init` defaults to `xc_func_info_get_default_flags()`,
+which is OnDevice on CUDA builds), so the CPU-guard tests fail confusingly:
+
+```bash
+LIBXC_DYLOAD=$LIBXC_DYLOAD_CUDA cargo test -p libxc --features cuda,api-v7_1
+```
 
 **Known limitation for v7.0 + CUDA**: When libxc v7.0 is compiled with CUDA
 (`--enable-cuda`), `libxc_malloc` uses `cudaMallocManaged` instead of `malloc`.

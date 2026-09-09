@@ -3,7 +3,11 @@ use std::fmt;
 use crate::enums::LibXCSpin;
 
 /// Error types for libxc operations.
+///
+/// This enum is `#[non_exhaustive]`: new variants may be added in patch
+/// releases, so downstream matches must include a wildcard (`_`) arm.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum LibXCError {
     /// An error indicating xc-functional / parameter not found.
     NotFound(String),
