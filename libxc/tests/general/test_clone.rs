@@ -114,6 +114,11 @@ fn clone_sees_parameters_set_before_cloning() {
     if libxc_version().0 >= 7 {
         assert_eq!(cloned.ext_param_values(), params);
         assert_ne!(cloned.ext_param_values(), cloned.ext_param_default_values());
+    } else {
+        assert!(matches!(
+            cloned.ext_param_values_f().unwrap_err(),
+            LibXCError::UnsupportedVersion { .. }
+        ));
     }
 }
 
@@ -128,10 +133,9 @@ fn cloned_functional_supports_introspection() {
     assert_eq!(cloned.hyb_exx_coef(), func.hyb_exx_coef());
     assert!(!cloned.references().is_empty());
 
-    // describe() reads current ext-param values, a libxc >= 7.0 capability
-    if libxc_version().0 >= 7 {
-        assert!(!cloned.describe().is_empty());
-    }
+    // describe() degrades to default ext-param values on libxc < 7.0
+    assert!(!cloned.describe().is_empty());
+    assert!(cloned.describe().contains("External Parameters"));
 }
 
 // ===========================================================================
@@ -195,6 +199,9 @@ fn setters_work_again_after_clones_dropped() {
     if libxc_version().0 >= 7 {
         assert_eq!(func.ext_param_values(), params);
     }
+    // by-name and by-map setters work on all versions
+    func.set_ext_param_by_name("_a", 0.3);
+    func.set_ext_param_map([("_b", 0.4)].into_iter());
     func.set_dens_threshold(1e-13);
     assert_eq!(func.dens_threshold(), 1e-13);
 

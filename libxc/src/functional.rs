@@ -820,27 +820,46 @@ impl LibXCFunctional {
         let ext_param_number = self.n_ext_params();
         if ext_param_number > 0 {
             let ext_param_names = self.ext_param_names();
-            let ext_param_values = self.ext_param_values();
             let ext_param_descriptions = self.ext_param_descriptions();
             let ext_param_default = self.ext_param_default_values();
-            lst.push("External Parameters".to_string());
-            for i in 0..ext_param_number as usize {
-                if ext_param_values[i] == ext_param_default[i] {
-                    lst.push(format!(
-                        "    - {:>9} = {:<20} {}",
-                        ext_param_names[i],
-                        trim_float(ext_param_values[i]),
-                        ext_param_descriptions[i],
-                    ));
-                } else {
-                    lst.push(format!(
-                        "    - {:>9} = {:<20} {:<50} (default: {:<20})",
-                        ext_param_names[i],
-                        trim_float(ext_param_values[i]),
-                        ext_param_descriptions[i],
-                        trim_float(ext_param_default[i])
-                    ))
-                };
+            // reading current values requires libxc >= 7.0; fall back to
+            // defaults (with a note) on older libraries
+            match self.ext_param_values_f() {
+                Ok(ext_param_values) => {
+                    lst.push("External Parameters".to_string());
+                    for i in 0..ext_param_number as usize {
+                        if ext_param_values[i] == ext_param_default[i] {
+                            lst.push(format!(
+                                "    - {:>9} = {:<20} {}",
+                                ext_param_names[i],
+                                trim_float(ext_param_values[i]),
+                                ext_param_descriptions[i],
+                            ));
+                        } else {
+                            lst.push(format!(
+                                "    - {:>9} = {:<20} {:<50} (default: {:<20})",
+                                ext_param_names[i],
+                                trim_float(ext_param_values[i]),
+                                ext_param_descriptions[i],
+                                trim_float(ext_param_default[i])
+                            ))
+                        };
+                    }
+                },
+                Err(_) => {
+                    lst.push(
+                        "External Parameters (current values need libxc >= 7.0; showing defaults)"
+                            .to_string(),
+                    );
+                    for i in 0..ext_param_number as usize {
+                        lst.push(format!(
+                            "    - {:>9} = {:<20} {}",
+                            ext_param_names[i],
+                            trim_float(ext_param_default[i]),
+                            ext_param_descriptions[i],
+                        ));
+                    }
+                },
             }
         }
         // references
@@ -949,13 +968,35 @@ impl LibXCFunctional {
     /// use libxc::prelude::{libxc_enum_items::*, *};
     /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
     /// xc_func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// # if libxc_version().0 >= 7 { // read-back requires libxc >= 7.0
     /// assert_eq!(xc_func.ext_param_values(), &[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// # }
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics on libxc < 7.0, which has no public API to read back current
+    /// parameter values; use [`ext_param_values_f`](Self::ext_param_values_f)
+    /// to avoid panicking. Setting parameters still works on those versions.
     pub fn ext_param_values(&self) -> Vec<f64> {
+        self.ext_param_values_f().unwrap()
+    }
+
+    /// Current values of the external parameters (fallible).
+    ///
+    /// Fails with [`LibXCError::UnsupportedVersion`] on libxc < 7.0: the
+    /// `xc_func_get_ext_params*` getters were only introduced in libxc v7.0
+    /// (see `versioning_xc.md`), and libxc 6.x keeps current values only in
+    /// per-functional storage with no uniform read-back.
+    pub fn ext_param_values_f(&self) -> Result<Vec<f64>, LibXCError> {
+        let version = crate::util::libxc_version();
+        if version < (7, 0, 0) {
+            return Err(LibXCError::UnsupportedVersion { needed: (7, 0, 0), found: version });
+        }
         let n = self.n_ext_params();
-        (0..n)
+        Ok((0..n)
             .map(|i| unsafe { ffi::xc_func_get_ext_params_value(self.inner.ptr, i as c_int) })
-            .collect()
+            .collect())
     }
 
     /// Returns a map of external parameter names to their (default value,
@@ -1003,9 +1044,11 @@ impl LibXCFunctional {
     /// use libxc::prelude::{libxc_enum_items::*, *};
     /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
     /// xc_func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    /// # if libxc_version().0 >= 7 { // read-back requires libxc >= 7.0
     /// for (key, val) in xc_func.ext_param_map() {
     ///     println!("{key:>10}: {val}");
     /// }
+    /// # }
     /// // Output:
     /// //     _a: 0.1
     /// //     _b: 0.1
@@ -1015,14 +1058,28 @@ impl LibXCFunctional {
     /// //    _m2: 0.8
     /// // _omega: 0.5
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics on libxc < 7.0 (see
+    /// [`ext_param_values`](Self::ext_param_values));
+    /// use [`ext_param_map_f`](Self::ext_param_map_f) to avoid panicking.
     pub fn ext_param_map(&self) -> IndexMap<String, f64> {
+        self.ext_param_map_f().unwrap()
+    }
+
+    /// Returns a map of external parameter names to their current values
+    /// (fallible).
+    ///
+    /// Fails with [`LibXCError::UnsupportedVersion`] on libxc < 7.0.
+    pub fn ext_param_map_f(&self) -> Result<IndexMap<String, f64>, LibXCError> {
         let names = self.ext_param_names();
-        let values = self.ext_param_values();
+        let values = self.ext_param_values_f()?;
         let mut map = IndexMap::new();
         for i in 0..names.len() {
             map.insert(names[i].clone(), values[i]);
         }
-        map
+        Ok(map)
     }
 
     /// Set all external parameters at once.
@@ -1061,9 +1118,11 @@ impl LibXCFunctional {
     /// let mut xc_func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
     /// let update_ext_param_map = HashMap::from([("_a", 0.1), ("_d", 0.2), ("_omega", 0.58)]);
     /// xc_func.set_ext_param_map(update_ext_param_map.iter());
+    /// # if libxc_version().0 >= 7 { // read-back requires libxc >= 7.0
     /// for (key, val) in xc_func.ext_param_map() {
     ///     println!("{key:>10}: {val}");
     /// }
+    /// # }
     /// // Output:
     /// //     _a: 0.1
     /// //     _b: 0.132
@@ -1091,7 +1150,17 @@ impl LibXCFunctional {
         &mut self,
         param_map: impl Iterator<Item = (impl AsRef<str>, impl Borrow<f64>)>,
     ) -> Result<(), LibXCError> {
-        let mut map = self.ext_param_map();
+        // On libxc < 7.0 current values cannot be read back; start from the
+        // defaults. This mirrors libxc 6.x semantics, where setting a single
+        // parameter by name also resets all others to their defaults.
+        let mut map = match self.ext_param_map_f() {
+            Ok(map) => map,
+            Err(_) => {
+                let names = self.ext_param_names();
+                let defaults = self.ext_param_default_values();
+                names.into_iter().zip(defaults).collect()
+            },
+        };
         for (key, val) in param_map.into_iter() {
             let (key, val) = (key.as_ref(), *val.borrow());
             if !map.contains_key(key) {
@@ -1117,9 +1186,11 @@ impl LibXCFunctional {
     /// xc_func.set_ext_param_by_name("_a", 0.1);
     /// xc_func.set_ext_param_by_name("_d", 0.2);
     /// xc_func.set_ext_param_by_name("_omega", 0.58);
+    /// # if libxc_version().0 >= 7 { // read-back requires libxc >= 7.0
     /// for (key, val) in xc_func.ext_param_map() {
     ///     println!("{key:>10}: {val}");
     /// }
+    /// # }
     /// // Output:
     /// //     _a: 0.1
     /// //     _b: 0.132

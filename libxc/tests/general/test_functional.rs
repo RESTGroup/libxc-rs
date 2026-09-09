@@ -159,6 +159,45 @@ fn test_ext_params_wrong_length() {
 }
 
 // ===========================================================================
+// test_ext_param_values_version_behavior
+// ===========================================================================
+
+#[test]
+// Reading back current ext-param values needs xc_func_get_ext_params_value,
+// introduced in libxc v7.0 (see versioning_xc.md). On older libraries the
+// fallible getters must return UnsupportedVersion instead of panicking, and
+// setters/describe must keep working.
+fn test_ext_param_values_version_behavior() {
+    let mut func = LibXCFunctional::from_identifier("gga_c_lypr", Unpolarized);
+    assert_eq!(func.n_ext_params(), 7);
+
+    if libxc_version().0 >= 7 {
+        let values = func.ext_param_values_f().unwrap();
+        assert_eq!(values.len(), 7);
+        assert_eq!(func.ext_param_map_f().unwrap().len(), 7);
+        func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+        assert_eq!(func.ext_param_values(), &[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+    } else {
+        assert!(matches!(
+            func.ext_param_values_f().unwrap_err(),
+            LibXCError::UnsupportedVersion { .. }
+        ));
+        assert!(matches!(
+            func.ext_param_map_f().unwrap_err(),
+            LibXCError::UnsupportedVersion { .. }
+        ));
+        // setters still work on libxc 6.x
+        func.set_ext_params(&[0.1, 0.1, 0.2, 0.3, 0.2, 0.8, 0.5]);
+        func.set_ext_param_by_name("_a", 0.3);
+        func.set_ext_param_map([("_b", 0.4)].into_iter());
+    }
+
+    // describe degrades to default values on libxc < 7.0 instead of panicking
+    let described = func.describe();
+    assert!(described.contains("External Parameters"));
+}
+
+// ===========================================================================
 // test_lda_compute
 // ===========================================================================
 
