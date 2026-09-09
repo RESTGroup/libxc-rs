@@ -47,7 +47,8 @@ impl LibXCFunctional {
         if let Some(details) = details {
             Err(LibXCError::ParamSetError { param_name: "hyb_exx_coef".to_string(), details })
         } else {
-            unsafe { (*self.ptr).cam_alpha = hyb_exx_coef };
+            let ptr = self.exclusive_ptr()?;
+            unsafe { (*ptr).cam_alpha = hyb_exx_coef };
             Ok(())
         }
     }
@@ -90,10 +91,11 @@ impl LibXCFunctional {
         }
         // set the CAM coefficients, which is usually the canonical way to get
         // these parameters
+        let ptr = self.exclusive_ptr()?;
         unsafe {
-            (*self.ptr).cam_alpha = cam_alpha;
-            (*self.ptr).cam_beta = cam_beta;
-            (*self.ptr).cam_omega = cam_omega;
+            (*ptr).cam_alpha = cam_alpha;
+            (*ptr).cam_beta = cam_beta;
+            (*ptr).cam_omega = cam_omega;
         }
         // also try to set the ext_params
         if self.ext_param_names().iter().any(|name| name == "_alpha") {
@@ -154,9 +156,10 @@ impl LibXCFunctional {
         }
         // set the VV10 coefficients, which is the canonical way to get these
         // parameters
+        let ptr = self.exclusive_ptr()?;
         unsafe {
-            (*self.ptr).nlc_b = nlc_b;
-            (*self.ptr).nlc_C = nlc_C;
+            (*ptr).nlc_b = nlc_b;
+            (*ptr).nlc_C = nlc_C;
         }
         // also set the ext_params for specific functionals
         if [LibXCFuncId::GGA_XC_VV10 as i32, LibXCFuncId::HYB_GGA_XC_LC_VV10 as i32]

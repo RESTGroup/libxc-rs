@@ -167,7 +167,7 @@ impl LibXCFunctional {
             )));
         }
         unsafe {
-            xc_lda_call(self.ptr, npoints, rho_ptr, output.as_mut_ptr(), &layout);
+            xc_lda_call(self.inner.ptr, npoints, rho_ptr, output.as_mut_ptr(), &layout);
         }
         Ok(layout)
     }
@@ -188,7 +188,7 @@ impl LibXCFunctional {
         let (npoints, rho_ptr, layout) = self.lda_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
         unsafe {
-            xc_lda_call(self.ptr, npoints, rho_ptr, buffer.as_mut_ptr(), &layout);
+            xc_lda_call(self.inner.ptr, npoints, rho_ptr, buffer.as_mut_ptr(), &layout);
         }
         Ok((buffer, layout))
     }
@@ -212,7 +212,7 @@ impl LibXCFunctional {
         let ptrs = validate_output_ptrs(output, &LDA_OUTPUT_LABELS, npoints, dim)?;
 
         unsafe {
-            xc_lda_call_with_output(self.ptr, npoints, rho_ptr, &ptrs);
+            xc_lda_call_with_output(self.inner.ptr, npoints, rho_ptr, &ptrs);
         }
         Ok(())
     }
@@ -261,7 +261,7 @@ impl LibXCFunctional {
             )));
         }
         unsafe {
-            xc_gga_call(self.ptr, npoints, rho_ptr, sigma_ptr, output.as_mut_ptr(), &layout);
+            xc_gga_call(self.inner.ptr, npoints, rho_ptr, sigma_ptr, output.as_mut_ptr(), &layout);
         }
         Ok(layout)
     }
@@ -281,7 +281,7 @@ impl LibXCFunctional {
         let (npoints, rho_ptr, sigma_ptr, layout) = self.gga_prepare(input, flags)?;
         let mut buffer = vec![0.0f64; layout.total_size];
         unsafe {
-            xc_gga_call(self.ptr, npoints, rho_ptr, sigma_ptr, buffer.as_mut_ptr(), &layout);
+            xc_gga_call(self.inner.ptr, npoints, rho_ptr, sigma_ptr, buffer.as_mut_ptr(), &layout);
         }
         Ok((buffer, layout))
     }
@@ -306,7 +306,7 @@ impl LibXCFunctional {
         let ptrs = validate_output_ptrs(output, &GGA_OUTPUT_LABELS, npoints, dim)?;
 
         unsafe {
-            xc_gga_call_with_output(self.ptr, npoints, rho_ptr, sigma_ptr, &ptrs);
+            xc_gga_call_with_output(self.inner.ptr, npoints, rho_ptr, sigma_ptr, &ptrs);
         }
         Ok(())
     }
@@ -371,7 +371,7 @@ impl LibXCFunctional {
             crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
-                self.ptr,
+                self.inner.ptr,
                 npoints,
                 rho_ptr,
                 sigma_ptr,
@@ -409,7 +409,7 @@ impl LibXCFunctional {
             crate::layout_handling::mgga_tau_scratch(&layout, dim, npoints);
         unsafe {
             xc_mgga_call(
-                self.ptr,
+                self.inner.ptr,
                 npoints,
                 rho_ptr,
                 sigma_ptr,
@@ -454,7 +454,14 @@ impl LibXCFunctional {
 
         unsafe {
             xc_mgga_call_with_output(
-                self.ptr, npoints, rho_ptr, sigma_ptr, lapl_ptr, tau_ptr, &ptrs, &extra,
+                self.inner.ptr,
+                npoints,
+                rho_ptr,
+                sigma_ptr,
+                lapl_ptr,
+                tau_ptr,
+                &ptrs,
+                &extra,
             );
         }
         Ok(())
